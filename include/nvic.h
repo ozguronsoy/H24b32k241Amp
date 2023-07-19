@@ -1,0 +1,1 @@
+#define NVIC_ISER0 (*(uint32_t*)0xE000E100u)
