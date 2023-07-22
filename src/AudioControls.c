@@ -62,8 +62,8 @@ typedef volatile struct
 AudioControlsStruct audioControls;
 
 void ADC_IRQHandler();
-inline void ConfigureAdcRegisters();
-inline void ConfigureGPIORegisters();
+void ADC_ConfigureAdcRegisters();
+void ADC_ConfigureGPIORegisters();
 
 void InitializeAudioControls()
 {
@@ -79,8 +79,8 @@ void InitializeAudioControls()
 
     RCC_APB2ENR |= 1 << 8; // enable the ADC1 clock
 
-    ConfigureAdcRegisters();
-    ConfigureGPIORegisters();
+    ADC_ConfigureAdcRegisters();
+    ADC_ConfigureGPIORegisters();
     NVIC_ISER0 |= 1 << 18; // enable the ADC IRQ handling
 
     ADC1_REGISTERS->CR2 |= 1; // ADON
@@ -96,7 +96,7 @@ uint32_t IsCleanMode()
     return (GPIOB_REGISTERS->IDR >> 14) & 1;
 }
 
-inline void ConfigureAdcRegisters()
+void ADC_ConfigureAdcRegisters()
 {
     ADC1_REGISTERS->CR1 |= 0b01 << 24; // 10-bit res
     ADC1_REGISTERS->CR1 |= 0b1 << 5; // EOC interrupt enabled
@@ -108,7 +108,7 @@ inline void ConfigureAdcRegisters()
     ADC1_REGISTERS->SQR3 = 0; // start from CH_0 (PA0)
 }
 
-inline void ConfigureGPIORegisters()
+void ADC_ConfigureGPIORegisters()
 {
     RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
     GPIOA_REGISTERS->MODER |= 0b1111110011111111; // set PA0, PA1, PA2, PA3, PA5, PA6, and PA7 as analogue mode

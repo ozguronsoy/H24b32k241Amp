@@ -7,7 +7,8 @@
         "ledcontrols.h": "c",
         "soundeffects.h": "c",
         "stdlib.h": "c",
-        "main.h": "c"
+        "main.h": "c",
+        "algorithm": "c"
     },
     "cmake.configureOnOpen": false
 }

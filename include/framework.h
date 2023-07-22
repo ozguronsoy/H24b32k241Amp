@@ -1,8 +1,6 @@
 #include <inttypes.h>
 #define INTTYPES_H 
 
-#pragma region DEFINES
-
 #if defined(DEBUG)
 
 #include <stdio.h>
@@ -22,6 +20,9 @@ extern int initialise_monitor_handles();
 
 #endif
 
+
+
+
 #define UINT24_MAX 0xFFFFFFu
 #define SAMPLE_RATE 96000u
 #define PIN_STATE_HIGH 1u
@@ -31,28 +32,11 @@ extern int initialise_monitor_handles();
 #define OUTPUT_BUFFER_FRAME_COUNT 4096u
 #define FFT_SIZE 4096u
 
-#pragma endregion
 
 
-#pragma region ENUMS
-
-typedef enum
-{
-    R_Success = 0,
-    R_Fail = 1, // nothing major, continue to run the app
-    R_HardFail = 2, // needs reset
-    R_Timeout = 3
-} Result;
-
-#pragma endregion
-
-
-#pragma region STRUCTS
 
 typedef struct
 {
     float re;
     float im;
 } Complex;
-
-#pragma endregion

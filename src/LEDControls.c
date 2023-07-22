@@ -1,3 +1,5 @@
+#if defined(DEBUG)
+
 #if !defined(LED_CONTROLS_H)
 #include "LEDControls.h"
 #define LED_CONTROLS_H
@@ -12,6 +14,7 @@
 #include "gpio.h"
 #define GPIO_H
 #endif
+
 
 void InitializeLED()
 {
@@ -37,3 +40,5 @@ void ChangeLEDColor(uint8_t color)
         break;
     }
 }
+
+#endif

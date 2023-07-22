@@ -13,7 +13,6 @@
 #define GPIO_H
 #endif
 
-#pragma region DEFINES
 
 #define I2S_SAMPLE_HO(sample) ((sample & 0x00FFFF00) >> 8) // for 24-bit data, 32-bit container
 #define I2S_SAMPLE_LO(sample) ((sample & 0x000000FF) << 8)
@@ -21,10 +20,8 @@
 #define I2S3_REGISTERS ((SpiRegisters*)0x40003C00u)
 #define I2S3EXT_REGISTERS ((SpiRegisters*)0x40004000u)
 
-#pragma endregion
 
 
-#pragma region STRUCTS
 
 typedef volatile struct
 {
@@ -39,36 +36,32 @@ typedef volatile struct
     uint32_t I2SPR;
 } SpiRegisters;
 
-#pragma endregion
 
 
-#pragma region FUNCTIONS
-
-
-inline void ConfigureRCC();
-inline void ConfigureI2S3Registers();
-inline void ConfigureGPIORegisters();
-inline void ConfigurePLLI2S();
+void I2S_ConfigureRCC();
+void I2S_ConfigureI2S3Registers();
+void I2S_ConfigureGPIORegisters();
+void I2S_ConfigurePLLI2S();
 
 void InitializeI2S3()
 {
-    ConfigureRCC();
-    ConfigureGPIORegisters();
-    ConfigureI2S3Registers();
-    ConfigurePLLI2S();
+    I2S_ConfigureRCC();
+    I2S_ConfigureGPIORegisters();
+    I2S_ConfigureI2S3Registers();
+    I2S_ConfigurePLLI2S();
 
     // enable the I2S peripheral
     I2S3_REGISTERS->I2SCFGR |= 1 << 10;
     I2S3EXT_REGISTERS->I2SCFGR |= 1 << 10;
 }
 
-inline void ConfigureRCC()
+void I2S_ConfigureRCC()
 {
     RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
     RCC_APB1ENR |= 0b1 << 15; // enable the SPI3 clock
 }
 
-inline void ConfigureI2S3Registers()
+void I2S_ConfigureI2S3Registers()
 {
     I2S3_REGISTERS->I2SCFGR |= 0b1010 << 8; // select the I2S mode as master-transmit
     I2S3EXT_REGISTERS->I2SCFGR |= 0b1011 << 8; // select the I2S mode as master-receive
@@ -82,7 +75,7 @@ inline void ConfigureI2S3Registers()
     I2S3EXT_REGISTERS->I2SPR |= 0b1100000011;
 }
 
-inline void ConfigureGPIORegisters()
+void I2S_ConfigureGPIORegisters()
 {
     // set to alternate function mode
     GPIOA_REGISTERS->MODER |= 0b10 << 8;
@@ -95,7 +88,7 @@ inline void ConfigureGPIORegisters()
     GPIOB_REGISTERS->AFRH |= 0b0110 << 8;
 }
 
-inline void ConfigurePLLI2S()
+void I2S_ConfigurePLLI2S()
 {
     RCC_PLLI2SCFGR |= 16; // PLLI2SM, PLLM VCO = 1MHz
     RCC_PLLI2SCFGR &= ~(0b111111111 << 6); // clear the PLLI2SN
@@ -103,5 +96,3 @@ inline void ConfigurePLLI2S()
     RCC_PLLI2SCFGR |= 2 << 28; // PLLI2SR
     RCC_CR |= 1 << 26; // Enable the PLLI2S
 }
-
-#pragma endregion
