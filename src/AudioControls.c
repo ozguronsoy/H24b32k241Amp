@@ -23,9 +23,15 @@
 #define MEMORY_H
 #endif
 
+#if !defined(MATH_H)
+#include <math.h>
+#define MATH_H
+#endif
+
 
 #define ADC_MAX 1023.0f // 10-bit ADC
 #define ADC_NORMALIZED_VALUE (((float)ADC1_REGISTERS->DR) / ADC_MAX)
+#define ADC_NORMALIZED_VALUE_TWO_DIGITS (roundf(ADC_NORMALIZED_VALUE * 100.0f) * 0.01f)
 #define ADC1_REGISTERS ((AdcRegisters*)0x40012000u)
 
 typedef volatile struct 
@@ -68,8 +74,8 @@ void InitializeAudioControls()
     audioControls.volume = 1.0f;
     audioControls.distortion = 0.0f;
     audioControls.overdrive = 0.0f;
-    audioControls.reverb = 0.0f;
-    audioControls.chorus = 0.0f;
+    audioControls.chorus_depth = 0.0f;
+    audioControls.chorus_rate = 0.0f;
 
     RCC_APB2ENR |= 1 << 8; // enable the ADC1 clock
 
@@ -93,14 +99,13 @@ uint32_t IsCleanMode()
 inline void ConfigureAdcRegisters()
 {
     ADC1_REGISTERS->CR1 |= 0b01 << 24; // 10-bit res
-    ADC1_REGISTERS->CR1 |= 0b0001 << 5; // scan mode enabled, EOC interrupt enabled
-    ADC1_REGISTERS->CR2 &= ~(0b11 << 10); // right alignment, EOC bit is set at the end of each regular conversion
+    ADC1_REGISTERS->CR1 |= 0b1 << 5; // EOC interrupt enabled
     
-    ADC1_REGISTERS->SMPR2 |= 0b111111111111000111111111000; // sampling time = 480 cycles 
+    ADC1_REGISTERS->SMPR2 |= 0b111111111111111000111111111111; // sampling time = 480 cycles 
 
-    ADC1_REGISTERS->SQR3 = 0;
-    
     ADC1_REGISTERS->CCR |= 0b11 << 16; // PCLCK2 / 8
+
+    ADC1_REGISTERS->SQR3 = 0; // start from CH_0 (PA0)
 }
 
 inline void ConfigureGPIORegisters()
@@ -116,39 +121,39 @@ void ADC_IRQHandler()
     switch (ADC1_REGISTERS->SQR3)
     {
     case 0:
-        audioControls.bass = ADC_NORMALIZED_VALUE;
+        audioControls.bass = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 1;
         break;
     case 1:
-        audioControls.low_mid = ADC_NORMALIZED_VALUE;
+        audioControls.low_mid = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 2;
         break;
     case 2:
-        audioControls.high_mid = ADC_NORMALIZED_VALUE;
+        audioControls.high_mid = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 3;
         break;
     case 3:
-        audioControls.treble = ADC_NORMALIZED_VALUE;
+        audioControls.treble = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 5;
         break;
     case 5:
-        audioControls.volume = ADC_NORMALIZED_VALUE;
+        audioControls.volume = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 6;
         break;
     case 6:
-        audioControls.distortion = ADC_NORMALIZED_VALUE;
+        audioControls.distortion = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 7;
         break;
     case 7:
-        audioControls.overdrive = ADC_NORMALIZED_VALUE;
+        audioControls.overdrive = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 8;
         break;
     case 8:
-        audioControls.reverb = ADC_NORMALIZED_VALUE;
+        audioControls.chorus_depth = ADC_NORMALIZED_VALUE_TWO_DIGITS;
         ADC1_REGISTERS->SQR3 = 9;
         break;
     case 9:
-        audioControls.chorus = ADC_NORMALIZED_VALUE;
+        audioControls.chorus_rate = ADC_NORMALIZED_VALUE_TWO_DIGITS * 10.0f;
         ADC1_REGISTERS->SQR3 = 0;
         break;
     default:

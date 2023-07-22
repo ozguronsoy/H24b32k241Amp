@@ -13,6 +13,11 @@
 #define AUDIO_CONTROLS_H
 #endif
 
+#if !defined(SOUND_EFFECTS_H)
+#include "SoundEffects.h"
+#define SOUND_EFFECTS_H
+#endif
+
 #if !defined(LED_CONTROLS_H)
 #include "LEDControls.h"
 #define LED_CONTROLS_H

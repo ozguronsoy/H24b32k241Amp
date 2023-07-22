@@ -26,6 +26,10 @@ extern int initialise_monitor_handles();
 #define SAMPLE_RATE 96000u
 #define PIN_STATE_HIGH 1u
 #define PIN_STATE_LOW 0u
+#define PI 3.14159265358979323846f
+#define INPUT_BUFFER_FRAME_COUNT 7168u
+#define OUTPUT_BUFFER_FRAME_COUNT 4096u
+#define FFT_SIZE 4096u
 
 #pragma endregion
 

@@ -1,5 +1,6 @@
 #define GPIOA_REGISTERS ((GpioRegisters*)0x40020000u)
 #define GPIOB_REGISTERS ((GpioRegisters*)0x40020400u)
+#define GPIOC_REGISTERS ((GpioRegisters*)0x40020800u)
 
 typedef volatile struct
 {

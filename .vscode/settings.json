@@ -4,6 +4,10 @@
         "inttypes.h": "c",
         "i2s.h": "c",
         "framework.h": "c",
-        "ledcontrols.h": "c"
-    }
+        "ledcontrols.h": "c",
+        "soundeffects.h": "c",
+        "stdlib.h": "c",
+        "main.h": "c"
+    },
+    "cmake.configureOnOpen": false
 }

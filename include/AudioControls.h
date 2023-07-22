@@ -12,22 +12,22 @@ typedef volatile struct
     float volume;
     float distortion;
     float overdrive;
-    float reverb;
-    float chorus;
+    float chorus_depth;
+    float chorus_rate; // LFO frequency
 } AudioControlsStruct;
 
 extern AudioControlsStruct audioControls;
 
 /*
     PA0 - bass
-    PA1 - low-mid
-    PA2 - high-mid
+    PA1 - low_mid
+    PA2 - high_mid
     PA3 - treble
     PA5 - volume
     PA6 - distortion (hard-clip)
     PA7 - overdrive
-    PB0 - reverb
-    PB1 - chorus
+    PB0 - chorus-depth
+    PB1 - chorus-rate
     PB14 - clean mode (digital input)
 */
 void InitializeAudioControls();
