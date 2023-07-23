@@ -213,11 +213,13 @@ void I2S_HandleTransmit()
         {
             if (I2S_FLAGS_TRANSMIT_HIGH_ORDER)
             {
-                transmitSample = SFX_Chorus(&outputBuffer);
-                transmitSample = SFX_Overdrive(transmitSample);
-                transmitSample = SFX_Distortion(transmitSample);
+                if (!IsCleanMode())
+                {
+                    transmitSample = SFX_Chorus(&outputBuffer);
+                    transmitSample = SFX_Overdrive(transmitSample);
+                    transmitSample = SFX_Distortion(transmitSample);
+                }
                 transmitSample *= audioControls.volume;
-
                 I2S3_REGISTERS->DR = I2S_SAMPLE_HO(I2S_FLOAT_TO_UINT24(transmitSample));
             }
             else
