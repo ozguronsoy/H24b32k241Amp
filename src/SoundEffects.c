@@ -28,6 +28,7 @@
 #define STDLIB_H
 #endif
 
+
 #define INPUT_RANGE(sample) ((sample) * 2.0f - 1.0f) // [0, 1] -> [-1, 1]
 #define OUTPUT_RANGE(sample) (((sample) + 1.0f) * 0.5f) // [-1, 1] -> [0, 1]
 
@@ -35,6 +36,7 @@
 #define DISTORTION_UPPER_BOUNDARY(distortion) (0.7f * distortion)
 
 
+#define CHORUS_LFO_DT (1.0f / ((float)SAMPLE_RATE))
 #define CHORUS_BASE_DELAY_MS 3.0f
 #define CHORUS_BASE_DELAY_SAMPLE (CHORUS_BASE_DELAY_MS * 1e-3f * ((float)SAMPLE_RATE)) // the delay will be between [BASE_DELAY_MS, (BASE_DELAY_MS + DELAY_MS)]
 #define CHORUS_DELAY_MS 30.0f
@@ -50,7 +52,7 @@
 
 
 
-volatile uint32_t chorus_LFO_index = 0;
+volatile float chorus_t_LFO = 0.0f;
 
 
 float SFX_Distortion(float sample)
@@ -76,33 +78,32 @@ float SFX_Overdrive(float sample)
 {
     volatile const float a = sinf(audioControls.overdrive * PI * 0.5f);
     const float k = 2.0f * a / (1.0f - a);
-
-    float result = INPUT_RANGE(sample);
-    result = (1.0f + k) * result / (1.0f + k * fabsf(result));
-    return OUTPUT_RANGE(result);
+    sample = INPUT_RANGE(sample);
+    return OUTPUT_RANGE(((1.0f + k) * sample / (1.0f + k * fabsf(sample))));
 }
 
-float SFX_Chorus(float* pBuffer, uint16_t index)
+float SFX_Chorus(AudioBuffer* pBuffer)
 {
     volatile const float rate = audioControls.chorus_rate;
     volatile const float wet = audioControls.chorus_depth * 0.5f;
 
     if (rate == 0 || wet == 0)
     {
-        return pBuffer[index];
+        return pBuffer->pData[pBuffer->readIndex];
     }
 
-    const float lfoSample = OUTPUT_RANGE(sinf(2.0f * PI * rate * ((float)chorus_LFO_index) / ((float)SAMPLE_RATE)));
+    const float lfoSample = OUTPUT_RANGE(sinf(2.0f * PI * rate * chorus_t_LFO));
     const uint16_t currentDelay_sample = roundf(lfoSample * CHORUS_DELAY_SAMPLE + CHORUS_BASE_DELAY_SAMPLE); // n samples of delay
-    const float resampleIndex = (index - currentDelay_sample) + lfoSample * CHORUS_RESAMPLE_DELTA;
+    const float resampleIndex = (pBuffer->readIndex - currentDelay_sample) + lfoSample * CHORUS_RESAMPLE_DELTA;
     const float resampleFactor = resampleIndex - floorf(resampleIndex);
     const uint16_t roundedResampleIndex = roundf(resampleIndex);
         
-    chorus_LFO_index++;
-    return pBuffer[index] * (1.0f - wet) + (pBuffer[roundedResampleIndex] * (1.0f - resampleFactor) + pBuffer[roundedResampleIndex + 1] * resampleFactor) * wet;
+    chorus_t_LFO += CHORUS_LFO_DT;
+
+    return pBuffer->pData[pBuffer->readIndex] * (1.0f - wet) + (pBuffer->pData[roundedResampleIndex] * (1.0f - resampleFactor) + pBuffer->pData[roundedResampleIndex + 1] * resampleFactor) * wet;
 }
 
-void SFX_Equalizer(float* pInputBuffer, float* pOutputBuffer, uint32_t inputBufferStartIndex)
+void SFX_Equalizer(AudioBuffer* pInputBuffer, AudioBuffer* pOutputBuffer)
 {
     Complex* pComplexBuffer = (Complex*)malloc(FFT_SIZE * sizeof(Complex));
     if (pComplexBuffer == NULL)
@@ -115,7 +116,7 @@ void SFX_Equalizer(float* pInputBuffer, float* pOutputBuffer, uint32_t inputBuff
     uint32_t i;
     for (i = 0; i < FFT_SIZE; i++)
     {
-        pComplexBuffer[i].re = pInputBuffer[(inputBufferStartIndex + i) % INPUT_BUFFER_FRAME_COUNT];
+        pComplexBuffer[i].re = pInputBuffer->pData[(pInputBuffer->readIndex + i) % INPUT_BUFFER_FRAME_COUNT];
         pComplexBuffer[i].im = 0.0f;
     }
 
@@ -152,10 +153,10 @@ void SFX_Equalizer(float* pInputBuffer, float* pOutputBuffer, uint32_t inputBuff
     }
 
     IFFT(pComplexBuffer);
-    
+
     for (i = 0; i < FFT_SIZE; i++)
     {
-        pOutputBuffer[i] += pComplexBuffer[i].re * EQ_HANN_WINDOW(i) / FFT_SIZE;
+        pOutputBuffer->pData[i + 4096] += pComplexBuffer[i].re * EQ_HANN_WINDOW(i) / FFT_SIZE;
     }
     
     free(pComplexBuffer);

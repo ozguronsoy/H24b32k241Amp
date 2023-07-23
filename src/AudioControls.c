@@ -31,7 +31,7 @@
 
 #define ADC_MAX 1023.0f // 10-bit ADC
 #define ADC_NORMALIZED_VALUE (((float)ADC1_REGISTERS->DR) / ADC_MAX)
-#define ADC_NORMALIZED_VALUE_TWO_DIGITS (roundf(ADC_NORMALIZED_VALUE * 100.0f) * 0.01f)
+#define ADC_NORMALIZED_VALUE_TWO_DIGITS (ceilf(ADC_NORMALIZED_VALUE * 1e2f) * 1e-2f)
 #define ADC1_REGISTERS ((AdcRegisters*)0x40012000u)
 
 typedef volatile struct 
@@ -82,6 +82,7 @@ void InitializeAudioControls()
     ADC_ConfigureAdcRegisters();
     ADC_ConfigureGPIORegisters();
     NVIC_ISER0 |= 1 << 18; // enable the ADC IRQ handling
+    NVIC_IPR4 |= 0b00100000 << 24; // set the interrupt priority
 
     ADC1_REGISTERS->CR2 |= 1; // ADON
     

@@ -29,7 +29,7 @@ extern int initialise_monitor_handles();
 #define PIN_STATE_LOW 0u
 #define PI 3.14159265358979323846f
 #define INPUT_BUFFER_FRAME_COUNT 7168u
-#define OUTPUT_BUFFER_FRAME_COUNT 4096u
+#define OUTPUT_BUFFER_FRAME_COUNT 8192u
 #define FFT_SIZE 4096u
 
 
@@ -40,3 +40,10 @@ typedef struct
     float re;
     float im;
 } Complex;
+
+typedef struct
+{
+    float* pData;
+    uint16_t readIndex;
+    uint16_t writeIndex;
+} AudioBuffer;
