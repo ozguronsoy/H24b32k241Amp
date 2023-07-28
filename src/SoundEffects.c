@@ -53,7 +53,18 @@
 
 
 volatile float chorus_t_LFO = 0.0f;
+volatile Complex* pComplexBuffer = NULL;
 
+
+void InitializeSoundEffects()
+{
+    pComplexBuffer = (Complex*)malloc(FFT_SIZE * sizeof(Complex));
+    if (pComplexBuffer == NULL)
+    {
+        DEBUG_PRINT("Insufficient memory! (EQ)");
+        CHANGE_LED_COLOR(LED_COLOR_ERROR);
+    }
+}
 
 float SFX_Distortion(float sample)
 {
@@ -105,14 +116,6 @@ float SFX_Chorus(AudioBuffer* pBuffer)
 
 void SFX_Equalizer(AudioBuffer* pInputBuffer, AudioBuffer* pOutputBuffer)
 {
-    Complex* pComplexBuffer = (Complex*)malloc(FFT_SIZE * sizeof(Complex));
-    if (pComplexBuffer == NULL)
-    {
-        DEBUG_PRINT("Insufficient memory! (EQ)");
-        CHANGE_LED_COLOR(LED_COLOR_ERROR);
-        return;
-    }
-
     uint32_t i;
     for (i = 0; i < FFT_SIZE; i++)
     {
@@ -158,6 +161,4 @@ void SFX_Equalizer(AudioBuffer* pInputBuffer, AudioBuffer* pOutputBuffer)
     {
         pOutputBuffer->pData[i + 4096] += pComplexBuffer[i].re * EQ_HANN_WINDOW(i) / FFT_SIZE;
     }
-    
-    free(pComplexBuffer);
 }

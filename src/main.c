@@ -27,6 +27,7 @@ int main()
 {
     INIT_MONITOR_HANDLES;
     INIT_LED;
+    InitializeSoundEffects();
     InitializeAudioControls();
     InitializeI2S3();
 
