@@ -192,7 +192,7 @@ void SPI3_IRQHandler()
     {
         I2S_HandleTransmit();
     }
-    if (I2S3EXT_REGISTERS->SR & 1) // recieve
+    if (I2S3EXT_REGISTERS->SR & 1)
     {
         I2S_HandleRecieve();
     }
@@ -209,11 +209,15 @@ void I2S_HandleTransmit()
 {
     if (I2S_FLAGS_TRANSMIT_ENABLED)
     {
-        if (outputBuffer.readIndex < 5120)
+        if (outputBuffer.readIndex < OUTPUT_BUFFER_FRAME_COUNT)
         {
             if (I2S_FLAGS_TRANSMIT_HIGH_ORDER)
             {
-                if (!IsCleanMode())
+                if (IsCleanMode())
+                {
+                    transmitSample = outputBuffer.pData[outputBuffer.readIndex];
+                }
+                else
                 {
                     transmitSample = SFX_Chorus(&outputBuffer);
                     transmitSample = SFX_Overdrive(transmitSample);
@@ -231,15 +235,15 @@ void I2S_HandleTransmit()
         else
         {
             I2S3_REGISTERS->DR = 0;
-            DEBUG_PRINT("Output buffer read index is greater than or equal to 5120!");
+            DEBUG_PRINT("Output buffer read index is greater than or equal to 5120!\n");
             CHANGE_LED_COLOR(LED_COLOR_ERROR);
         }
+        I2S_FLAGS_TOGGLE_TRANSMIT_ORDER();
     }
     else
     {
         I2S3_REGISTERS->DR = 0;
     }
-    I2S_FLAGS_TOGGLE_TRANSMIT_ORDER();
 }
 
 void I2S_HandleRecieve()
@@ -310,6 +314,7 @@ void I2S_HandleRecieve()
                I2S_FLAGS_ENABLE_TRANSMIT(); 
                SFX_Equalizer(&inputBuffer, &outputBuffer);
                inputBuffer.readIndex = 1024;
+               outputBuffer.readIndex = 4096;
             }
         }
     }   

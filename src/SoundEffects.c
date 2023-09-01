@@ -41,7 +41,7 @@
 #define CHORUS_BASE_DELAY_SAMPLE (CHORUS_BASE_DELAY_MS * 1e-3f * ((float)SAMPLE_RATE)) // the delay will be between [BASE_DELAY_MS, (BASE_DELAY_MS + DELAY_MS)]
 #define CHORUS_DELAY_MS 30.0f
 #define CHORUS_DELAY_SAMPLE (CHORUS_DELAY_MS * 1e-3f * ((float)SAMPLE_RATE))
-#define CHORUS_RESAMPLE_DELTA 0 // fs * (pow(2, semitone / 12) - 1.0)
+#define CHORUS_RESAMPLE_DELTA 5708 // fs * (pow(2, semitone / 12) - 1.0)
 
 
 #define EQ_NYQUIST (FFT_SIZE * 0.5f)
