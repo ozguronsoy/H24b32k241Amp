@@ -1,9 +1,6 @@
 #if defined(DEBUG)
 
-#if !defined(LED_CONTROLS_H)
-#include "LEDControls.h"
-#define LED_CONTROLS_H
-#endif
+#include "LedControls.h"
 
 #if !defined(RCC_H)
 #include "rcc.h"

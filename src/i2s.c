@@ -1,6 +1,13 @@
-#if !defined(I2S_H)
 #include "i2s.h"
-#define I2S_H
+
+#if !defined(FRAMEWORK_H)
+#include "framework.h"
+#define FRAMEWORK_H
+#endif
+
+#if !defined(SPI_H)
+#include "spi.h"
+#define SPI_H
 #endif
 
 #if !defined(RCC_H)
@@ -29,7 +36,7 @@
 #endif
 
 #if !defined(LED_CONTROLS_H)
-#include "LEDControls.h"
+#include "LedControls.h"
 #define LED_CONTROLS_H
 #endif
 
@@ -61,23 +68,6 @@
 #define I2S3EXT_REGISTERS ((SpiRegisters*)0x40004000u)
 
 
-
-
-typedef volatile struct
-{
-    uint32_t CR1;
-    uint32_t CR2;
-    uint32_t SR;
-    uint32_t DR;
-    uint32_t CRCPR;
-    uint32_t RXCRCR;
-    uint32_t TXCRCR;
-    uint32_t I2SCFGR;
-    uint32_t I2SPR;
-} SpiRegisters;
-
-
-
 volatile uint8_t flags;
 volatile float transmitSample;
 volatile uint32_t recieveSample;
@@ -98,8 +88,14 @@ void I2S_ShiftOutputBuffer();
 void I2S_HandleTransmit();
 void I2S_HandleRecieve();
 
+#if TEST_OUTPUT == TEST_ENABLED
+void I2S_TestOutput_HandleTransmit();
+#endif
+
 void InitializeI2S3()
 {
+    DEBUG_PRINT("I2S: Initializing I2S3...\n");
+
     flags = 0b11;
     
     I2S_InitBuffers();
@@ -113,15 +109,18 @@ void InitializeI2S3()
     // enable the I2S peripheral
     I2S3EXT_REGISTERS->I2SCFGR |= 1 << 10;
     I2S3_REGISTERS->I2SCFGR |= 1 << 10;
+
+    DEBUG_PRINT("I2S: I2S3 initialized successfully\n");
 }
 
 void I2S_InitBuffers()
 {
+    DEBUG_PRINT("I2S: Initializing the input buffer\n");
     const uint32_t inputBufferSize = INPUT_BUFFER_FRAME_COUNT * sizeof(float);
     inputBuffer.pData = (float*)malloc(inputBufferSize);
     if (inputBuffer.pData == NULL)
     {
-        DEBUG_PRINT("Insufficient memory (input buffer)");
+        DEBUG_PRINT("Insufficient memory (input buffer)\n");
         CHANGE_LED_COLOR(LED_COLOR_ERROR);
         return;
     }
@@ -129,11 +128,12 @@ void I2S_InitBuffers()
     inputBuffer.readIndex = 0;
     inputBuffer.writeIndex = 0;
 
+    DEBUG_PRINT("I2S: Initializing the output buffer\n");
     const uint32_t outputBufferSize = OUTPUT_BUFFER_FRAME_COUNT * sizeof(float);
     outputBuffer.pData = (float*)malloc(outputBufferSize);
     if (outputBuffer.pData == NULL)
     {
-        DEBUG_PRINT("Insufficient memory (output buffer)");
+        DEBUG_PRINT("Insufficient memory (output buffer)\n");
         CHANGE_LED_COLOR(LED_COLOR_ERROR);
         return;
     }
@@ -144,12 +144,15 @@ void I2S_InitBuffers()
 
 void I2S_ConfigureRCC()
 {
+    DEBUG_PRINT("I2S: Configuring the RCC for I2S3\n");
     RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
     RCC_APB1ENR |= 0b1 << 15; // enable the SPI3 clock
 }
 
 void I2S_ConfigureI2S3Registers()
 {
+    DEBUG_PRINT("I2S: Configuring the I2S3 & I2S3EXT registers\n");
+
     I2S3_REGISTERS->CR2 |= 1 << 7; // enable the I2S3 transmit IRQ handling
     I2S3EXT_REGISTERS->CR2 |= 1 << 6; // enable the I2S3ext recieve IRQ handling
 
@@ -166,6 +169,8 @@ void I2S_ConfigureI2S3Registers()
 
 void I2S_ConfigureGPIORegisters()
 {
+    DEBUG_PRINT("I2S: Configuring the I2S3 & I2S3EXT GPIO registers\n");
+
     // set to alternate function mode
     GPIOA_REGISTERS->MODER |= 0b10 << 8;
     GPIOB_REGISTERS->MODER |= 0b101010 << 6;
@@ -179,6 +184,8 @@ void I2S_ConfigureGPIORegisters()
 
 void I2S_ConfigurePLLI2S()
 {
+    DEBUG_PRINT("I2S: Configuring the PLLI2S\n");
+
     RCC_PLLI2SCFGR |= 16; // PLLI2SM, PLLM VCO = 1MHz
     RCC_PLLI2SCFGR &= ~(0b111111111 << 6); // clear the PLLI2SN
     RCC_PLLI2SCFGR |= 344 << 6; // PLLI2SN
@@ -188,6 +195,15 @@ void I2S_ConfigurePLLI2S()
 
 void SPI3_IRQHandler()
 {
+#if TEST_OUTPUT == TEST_ENABLED
+
+    if (((I2S3_REGISTERS->SR >> 1) & 1))
+    {
+        I2S_TestOutput_HandleTransmit();
+    }
+
+#else
+
     if (((I2S3_REGISTERS->SR >> 1) & 1))
     {
         I2S_HandleTransmit();
@@ -196,6 +212,8 @@ void SPI3_IRQHandler()
     {
         I2S_HandleRecieve();
     }
+
+#endif
 }
 
 void I2S_ShiftOutputBuffer()
@@ -320,3 +338,28 @@ void I2S_HandleRecieve()
     }   
     I2S_FLAGS_TOGGLE_RECIEVE_ORDER();
 }
+
+#if TEST_OUTPUT == TEST_ENABLED
+
+void I2S_TestOutput_HandleTransmit()
+{
+    const float f = 250.0f;
+
+#if TEST_OUTPUT_USE_CONSTANT_VALUE == TEST_ENABLED
+    transmitSample = TEST_OTUPUT_CONSTANT_VALUE;
+#else
+    transmitSample = (sin(2.0f * PI * f * ((float)outputBuffer.readIndex) / ((float)SAMPLE_RATE)) + 1.0f) * 0.5f;
+#endif
+
+    if (I2S_FLAGS_TRANSMIT_HIGH_ORDER)
+    {
+        I2S3_REGISTERS->DR = I2S_SAMPLE_HO(I2S_FLOAT_TO_UINT24(transmitSample));
+    }
+    else
+    {
+        I2S3_REGISTERS->DR = I2S_SAMPLE_LO(I2S_FLOAT_TO_UINT24(transmitSample));
+        outputBuffer.readIndex++;
+    }
+}
+
+#endif

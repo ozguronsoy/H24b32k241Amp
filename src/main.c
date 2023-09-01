@@ -8,6 +8,11 @@
 #define I2S_H
 #endif
 
+#if !defined(DAC_CONTROLS_H)
+#include "DacControls.h"
+#define DAC_CONTROLS_H
+#endif
+
 #if !defined(AUDIO_CONTROLS_H)
 #include "AudioControls.h"
 #define AUDIO_CONTROLS_H
@@ -19,7 +24,7 @@
 #endif
 
 #if !defined(LED_CONTROLS_H)
-#include "LEDControls.h"
+#include "LedControls.h"
 #define LED_CONTROLS_H
 #endif
 
@@ -27,6 +32,7 @@ int main()
 {
     INIT_MONITOR_HANDLES;
     INIT_LED;
+    ConfigureDAC();
     InitializeSoundEffects();
     InitializeAudioControls();
     InitializeI2S3();

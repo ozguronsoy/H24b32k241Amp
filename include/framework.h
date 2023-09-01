@@ -11,14 +11,23 @@ extern int initialise_monitor_handles();
 #define INIT_MONITOR_HANDLES initialise_monitor_handles()
 #define DEBUG_PRINT(str) printf(str)
 #define DEBUG_PRINTF(str, ...) printf(str, __VA_ARGS__)
+#define TEST_OUTPUT TEST_DISABLED                            // set this to TEST_ENABLED to test the output with a sine wave
+#define TEST_OUTPUT_USE_CONSTANT_VALUE TEST_DISABLED         // set both TEST_OUTPUT and this to TEST_ENABLED to test the output with a constant value
+#define TEST_OTUPUT_CONSTANT_VALUE 0xABCDEFu                // the value that will be used in testing.
 
 #else
 
 #define INIT_MONITOR_HANDLES
 #define DEBUG_PRINT(str)
-#define DEBUG_PRINTF(str, ...) 
+#define DEBUG_PRINTF(str, ...)
+#define TEST_OUTPUT
+#define TEST_OUTPUT_USE_CONSTANT_VALUE
+#define TEST_OTUPUT_CONSTANT_VALUE
 
 #endif
+
+#define TEST_DISABLED 0
+#define TEST_ENABLED 1
 
 
 

@@ -1,7 +1,4 @@
-#if !defined(AUDIO_CONTROLS_H)
 #include "AudioControls.h"
-#define AUDIO_CONTROLS_H
-#endif
 
 #if !defined(RCC_H)
 #include "rcc.h"
@@ -67,6 +64,8 @@ void ADC_ConfigureGPIORegisters();
 
 void InitializeAudioControls()
 {
+    DEBUG_PRINT("AUDIO CONTROLS: Initializing...\n");
+
     audioControls.bass = 1.0f;
     audioControls.low_mid = 1.0f;
     audioControls.high_mid = 1.0f;
@@ -90,6 +89,8 @@ void InitializeAudioControls()
     for(i = 0; i < 2500000; i++); // wait for ADC to stabilize
     
     ADC1_REGISTERS->CR2 |= 1 << 30; // start conversion
+
+    DEBUG_PRINT("AUDIO CONTROLS: initialized successfully\n");
 }
 
 uint32_t IsCleanMode()
@@ -99,6 +100,8 @@ uint32_t IsCleanMode()
 
 void ADC_ConfigureAdcRegisters()
 {
+    DEBUG_PRINT("AUDIO CONTROLS: Configuring the ADC1 registers\n");
+
     ADC1_REGISTERS->CR1 |= 0b01 << 24; // 10-bit res
     ADC1_REGISTERS->CR1 |= 0b1 << 5; // EOC interrupt enabled
     
@@ -111,6 +114,8 @@ void ADC_ConfigureAdcRegisters()
 
 void ADC_ConfigureGPIORegisters()
 {
+    DEBUG_PRINT("AUDIO CONTROLS: Configuring the GPIO registers\n");
+
     RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
     GPIOA_REGISTERS->MODER |= 0b1111110011111111; // set PA0, PA1, PA2, PA3, PA5, PA6, and PA7 as analogue mode
     GPIOB_REGISTERS->MODER |= 0b1111; // set PB0 and PB1 as analogue mode

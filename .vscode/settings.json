@@ -8,7 +8,9 @@
         "soundeffects.h": "c",
         "stdlib.h": "c",
         "main.h": "c",
-        "algorithm": "c"
+        "algorithm": "c",
+        "daccontrols.h": "c",
+        "sstream": "c"
     },
     "cmake.configureOnOpen": false
 }

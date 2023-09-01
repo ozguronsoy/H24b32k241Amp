@@ -14,7 +14,7 @@
 #endif
 
 #if !defined(LED_CONTROLS_H)
-#include "LEDControls.h"
+#include "LedControls.h"
 #define LED_CONTROLS_H
 #endif
 
