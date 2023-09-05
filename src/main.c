@@ -3,9 +3,24 @@
 #define FRAMEWORK_H
 #endif
 
+#if !defined(RCC_H)
+#include "rcc.h"
+#define RCC_H
+#endif
+
 #if !defined(I2S_H)
 #include "i2s.h"
 #define I2S_H
+#endif
+
+#if !defined(RENDER_H)
+#include "Render.h"
+#define RENDER_H
+#endif
+
+#if !defined(CAPTURE_H)
+#include "Capture.h"
+#define CAPTURE_H
 #endif
 
 #if !defined(DAC_CONTROLS_H)
@@ -23,20 +38,25 @@
 #define SOUND_EFFECTS_H
 #endif
 
-#if !defined(LED_CONTROLS_H)
-#include "LedControls.h"
-#define LED_CONTROLS_H
-#endif
+#define CHECK_RESULT(x) if (x == RESULT_FAIL) { goto LOOP; }
 
 int main()
 {
-    INIT_MONITOR_HANDLES;
-    INIT_LED;
-    ConfigureDAC();
-    InitializeSoundEffects();
-    InitializeAudioControls();
-    InitializeI2S3();
+    INIT_MONITOR_HANDLES; // debug only
 
+    RCC_AHB1ENR |= 0b111; // enable the GPIO A, B & C clock
+
+    CHECK_RESULT(ConfigureDAC());
+    CHECK_RESULT(InitializeSoundEffects());
+    CHECK_RESULT(InitializeAudioControls());
+    ConfigurePLLI2S();
+    CHECK_RESULT(InitializeCapture());
+    CHECK_RESULT(InitializeRender());
+    StartCapturing();
+    StartRendering();
+
+LOOP:
     while(1);
+    
     return 0;
 }

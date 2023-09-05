@@ -13,11 +13,6 @@
 #define FOURIER_H
 #endif
 
-#if !defined(LED_CONTROLS_H)
-#include "LedControls.h"
-#define LED_CONTROLS_H
-#endif
-
 #if !defined(MATH_H)
 #include <math.h>
 #define MATH_H
@@ -45,7 +40,6 @@
 
 
 #define EQ_NYQUIST (FFT_SIZE * 0.5f)
-#define EQ_HANN_WINDOW(index) (sinf(PI * index / (OUTPUT_BUFFER_FRAME_COUNT - 1)))
 #define EQ_BIN_START_L_MID 7    // 160 Hz
 #define EQ_BIN_START_H_MID 31   // 720 Hz
 #define EQ_BIN_START_TREBLE 55  // 1280 Hz
@@ -53,17 +47,39 @@
 
 
 volatile float chorus_t_LFO = 0.0f;
+volatile float* hannBuffer = NULL;
 volatile Complex* pComplexBuffer = NULL;
 
 
-void InitializeSoundEffects()
+uint32_t InitializeSoundEffects()
 {
+    DEBUG_PRINT("SOUND EFFECTS: initializing...\n");
+
+    DEBUG_PRINT("SOUND EFFECTS: initializing the EQ buffer\n");
     pComplexBuffer = (Complex*)malloc(FFT_SIZE * sizeof(Complex));
     if (pComplexBuffer == NULL)
     {
-        DEBUG_PRINT("Insufficient memory! (EQ)");
-        CHANGE_LED_COLOR(LED_COLOR_ERROR);
+        DEBUG_PRINT("Insufficient memory! (EQ buffer)");
+        return RESULT_FAIL;
     }
+
+    DEBUG_PRINT("SOUND EFFECTS: initializing the Hann  window\n");
+    hannBuffer = (float*)malloc(FFT_SIZE * sizeof(float));
+    if (hannBuffer == NULL)
+    {
+        DEBUG_PRINT("Insufficient memory! (Hann window)");
+        return RESULT_FAIL;
+    }
+    
+    uint32_t i;
+    for (i = 0; i < FFT_SIZE; i++)
+    {
+        hannBuffer[i] = sinf(PI * i / (FFT_SIZE - 1));
+    }
+
+    DEBUG_PRINT("SOUND EFFECTS: initialized successfully\n");
+    
+    return RESULT_SUCCESS;
 }
 
 float SFX_Distortion(float sample)
@@ -93,33 +109,34 @@ float SFX_Overdrive(float sample)
     return OUTPUT_RANGE(((1.0f + k) * sample / (1.0f + k * fabsf(sample))));
 }
 
-float SFX_Chorus(AudioBuffer* pBuffer)
+float SFX_Chorus(volatile AudioBuffer* pBuffer)
 {
     volatile const float rate = audioControls.chorus_rate;
     volatile const float wet = audioControls.chorus_depth * 0.5f;
 
     if (rate == 0 || wet == 0)
     {
-        return pBuffer->pData[pBuffer->readIndex];
+        return pBuffer->pData[pBuffer->index];
     }
 
     const float lfoSample = OUTPUT_RANGE(sinf(2.0f * PI * rate * chorus_t_LFO));
     const uint16_t currentDelay_sample = roundf(lfoSample * CHORUS_DELAY_SAMPLE + CHORUS_BASE_DELAY_SAMPLE); // n samples of delay
-    const float resampleIndex = (pBuffer->readIndex - currentDelay_sample) + lfoSample * CHORUS_RESAMPLE_DELTA;
+    const float resampleIndex = (pBuffer->index - currentDelay_sample) + lfoSample * CHORUS_RESAMPLE_DELTA;
     const float resampleFactor = resampleIndex - floorf(resampleIndex);
     const uint16_t roundedResampleIndex = roundf(resampleIndex);
         
     chorus_t_LFO += CHORUS_LFO_DT;
 
-    return pBuffer->pData[pBuffer->readIndex] * (1.0f - wet) + (pBuffer->pData[roundedResampleIndex] * (1.0f - resampleFactor) + pBuffer->pData[roundedResampleIndex + 1] * resampleFactor) * wet;
+    return pBuffer->pData[pBuffer->index] * (1.0f - wet) + (pBuffer->pData[roundedResampleIndex] * (1.0f - resampleFactor) + pBuffer->pData[roundedResampleIndex + 1] * resampleFactor) * wet;
 }
 
-void SFX_Equalizer(AudioBuffer* pInputBuffer, AudioBuffer* pOutputBuffer)
+void SFX_Equalizer(volatile AudioBuffer* pInputBuffer, volatile AudioBuffer* pOutputBuffer)
 {
     uint32_t i;
+    const uint32_t readIndex = pInputBuffer + 4096;
     for (i = 0; i < FFT_SIZE; i++)
     {
-        pComplexBuffer[i].re = pInputBuffer->pData[(pInputBuffer->readIndex + i) % INPUT_BUFFER_FRAME_COUNT];
+        pComplexBuffer[i].re = pInputBuffer->pData[(readIndex + i) % CAPTURE_BUFFER_FRAME_COUNT];
         pComplexBuffer[i].im = 0.0f;
     }
 
@@ -159,6 +176,6 @@ void SFX_Equalizer(AudioBuffer* pInputBuffer, AudioBuffer* pOutputBuffer)
 
     for (i = 0; i < FFT_SIZE; i++)
     {
-        pOutputBuffer->pData[i + 4096] += pComplexBuffer[i].re * EQ_HANN_WINDOW(i) / FFT_SIZE;
+        pOutputBuffer->pData[i + 4096] += pComplexBuffer[i].re * hannBuffer[i] / FFT_SIZE;
     }
 }

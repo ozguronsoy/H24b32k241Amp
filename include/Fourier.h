@@ -3,5 +3,5 @@
 #define FRAMEWORK_H
 #endif
 
-void FFT(Complex* pComplexBuffer);
-void IFFT(Complex* pComplexBuffer);
+void FFT(volatile Complex* pComplexBuffer);
+void IFFT(volatile Complex* pComplexBuffer);

@@ -30,5 +30,5 @@ extern AudioControlsStruct audioControls;
     PB1 - chorus-rate
     PB14 - clean mode (digital input)
 */
-void InitializeAudioControls();
+uint32_t InitializeAudioControls();
 uint32_t IsCleanMode();

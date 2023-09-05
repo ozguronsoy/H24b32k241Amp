@@ -7,7 +7,7 @@
 
 #define LOG2_FFT_SIZE 12 // log2(FFT_SIZE)
 
-void ReverseBits(Complex* pComplexBuffer)
+void ReverseBits(volatile Complex* pComplexBuffer)
 {
     uint32_t i, j = 0;
     Complex temp;
@@ -31,7 +31,7 @@ Complex ComplexMultipication(Complex a, Complex b)
     return result;
 }
 
-void FFT(Complex* pComplexBuffer)
+void FFT(volatile Complex* pComplexBuffer)
 {
     ReverseBits(pComplexBuffer);
     
@@ -64,7 +64,7 @@ void FFT(Complex* pComplexBuffer)
     }
 }
 
-void IFFT(Complex* pComplexBuffer)
+void IFFT(volatile Complex* pComplexBuffer)
 {
     ReverseBits(pComplexBuffer);
     

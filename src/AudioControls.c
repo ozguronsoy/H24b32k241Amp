@@ -62,7 +62,7 @@ void ADC_IRQHandler();
 void ADC_ConfigureAdcRegisters();
 void ADC_ConfigureGPIORegisters();
 
-void InitializeAudioControls()
+uint32_t InitializeAudioControls()
 {
     DEBUG_PRINT("AUDIO CONTROLS: Initializing...\n");
 
@@ -81,16 +81,14 @@ void InitializeAudioControls()
     ADC_ConfigureAdcRegisters();
     ADC_ConfigureGPIORegisters();
     NVIC_ISER0 |= 1 << 18; // enable the ADC IRQ handling
-    NVIC_IPR4 |= 0b00100000 << 24; // set the interrupt priority
+    NVIC_IPR4 |= 0b00110000 << 24; // set the interrupt priority
 
     ADC1_REGISTERS->CR2 |= 1; // ADON
-    
-    int i;
-    for(i = 0; i < 2500000; i++); // wait for ADC to stabilize
-    
     ADC1_REGISTERS->CR2 |= 1 << 30; // start conversion
 
     DEBUG_PRINT("AUDIO CONTROLS: initialized successfully\n");
+
+    return RESULT_SUCCESS;
 }
 
 uint32_t IsCleanMode()
@@ -116,7 +114,6 @@ void ADC_ConfigureGPIORegisters()
 {
     DEBUG_PRINT("AUDIO CONTROLS: Configuring the GPIO registers\n");
 
-    RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
     GPIOA_REGISTERS->MODER |= 0b1111110011111111; // set PA0, PA1, PA2, PA3, PA5, PA6, and PA7 as analogue mode
     GPIOB_REGISTERS->MODER |= 0b1111; // set PB0 and PB1 as analogue mode
 }

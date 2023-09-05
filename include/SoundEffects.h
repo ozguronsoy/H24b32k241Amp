@@ -3,8 +3,9 @@
 #define FRAMEWORK_H
 #endif
 
-void InitializeSoundEffects();
+// Allocates memory for the equalizer
+uint32_t InitializeSoundEffects();
 float SFX_Distortion(float sample);
 float SFX_Overdrive(float sample);
-float SFX_Chorus(AudioBuffer* pBuffer);
-void SFX_Equalizer(AudioBuffer* pInputBuffer, AudioBuffer* pOutputBuffer);
+float SFX_Chorus(volatile AudioBuffer* pBuffer);
+void SFX_Equalizer(volatile AudioBuffer* pInputBuffer, volatile AudioBuffer* pOutputBuffer);

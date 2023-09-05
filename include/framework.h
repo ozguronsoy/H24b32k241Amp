@@ -11,36 +11,34 @@ extern int initialise_monitor_handles();
 #define INIT_MONITOR_HANDLES initialise_monitor_handles()
 #define DEBUG_PRINT(str) printf(str)
 #define DEBUG_PRINTF(str, ...) printf(str, __VA_ARGS__)
-#define TEST_OUTPUT TEST_DISABLED                            // set this to TEST_ENABLED to test the output with a sine wave
-#define TEST_OUTPUT_USE_CONSTANT_VALUE TEST_DISABLED         // set both TEST_OUTPUT and this to TEST_ENABLED to test the output with a constant value
-#define TEST_OTUPUT_CONSTANT_VALUE 0xABCDEFu                // the value that will be used in testing.
 
 #else
 
 #define INIT_MONITOR_HANDLES
 #define DEBUG_PRINT(str)
 #define DEBUG_PRINTF(str, ...)
-#define TEST_OUTPUT
-#define TEST_OUTPUT_USE_CONSTANT_VALUE
-#define TEST_OTUPUT_CONSTANT_VALUE
 
 #endif
 
-#define TEST_DISABLED 0
-#define TEST_ENABLED 1
 
 
-
-
+#define RESULT_FAIL 0
+#define RESULT_SUCCESS 1
 #define UINT24_MAX 0xFFFFFFu
 #define SAMPLE_RATE 96000u
 #define PIN_STATE_HIGH 1u
 #define PIN_STATE_LOW 0u
 #define PI 3.14159265358979323846f
-#define INPUT_BUFFER_FRAME_COUNT 7168u
-#define OUTPUT_BUFFER_FRAME_COUNT 8192u
+#define CAPTURE_BUFFER_FRAME_COUNT 7168u
+#define RENDER_BUFFER_FRAME_COUNT 8192u
 #define FFT_SIZE 4096u
-
+#define LOW 0
+#define HIGH 1
+#define SAMPLE_LO(sample) ((sample & 0x000000FF) << 8)
+#define SAMPLE_HO(sample) ((sample & 0x00FFFF00) >> 8) // for 24-bit data, 32-bit container
+#define FLOAT_TO_UINT24(sample) ((uint32_t)(sample * UINT24_MAX))
+#define UINT24_TO_FLOAT(sample) (((float)sample) / ((float)UINT24_MAX))
+#define I2S_PR_VALUE 0b1100000110 // MCK enabled, odd and I2SDIV = 6 for 96kHz when PLLN = 328 and PLLR = 1
 
 
 
@@ -53,6 +51,5 @@ typedef struct
 typedef struct
 {
     float* pData;
-    uint16_t readIndex;
-    uint16_t writeIndex;
+    uint16_t index;
 } AudioBuffer;
