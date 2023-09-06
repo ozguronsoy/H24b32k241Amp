@@ -20,8 +20,6 @@ extern int initialise_monitor_handles();
 
 #endif
 
-
-
 #define RESULT_FAIL 0
 #define RESULT_SUCCESS 1
 #define UINT24_MAX 0xFFFFFFu
@@ -29,9 +27,13 @@ extern int initialise_monitor_handles();
 #define PIN_STATE_HIGH 1u
 #define PIN_STATE_LOW 0u
 #define PI 3.14159265358979323846f
-#define CAPTURE_BUFFER_FRAME_COUNT 7168u
-#define RENDER_BUFFER_FRAME_COUNT 8192u
-#define FFT_SIZE 4096u
+#define FFT_STEP_SIZE 256u
+#define FFT_SIZE 1024u
+#define CAPTURE_BUFFER_FRAME_COUNT FFT_SIZE
+#define RENDER_BUFFER_FRAME_COUNT 9600u
+#define RENDER_BUFFER_TRANSMIT_START_INDEX (RENDER_BUFFER_FRAME_COUNT / 2) // the first half of the buffer is for the old (rendered) samples
+// CaptureBuffer + RenderBuffer + HannWindow + ComplexBuffer (FFT) in KB
+#define TOTAL_BUFFER_MEM_USAGE_KB (((CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t)) + (RENDER_BUFFER_FRAME_COUNT * sizeof(uint32_t)) + (FFT_SIZE * sizeof(float)) + (FFT_SIZE * sizeof(Complex))) * 1e-3f)
 #define LOW 0
 #define HIGH 1
 #define SAMPLE_LO(sample) ((sample & 0x000000FF) << 8)
@@ -39,7 +41,6 @@ extern int initialise_monitor_handles();
 #define FLOAT_TO_UINT24(sample) ((uint32_t)(sample * UINT24_MAX))
 #define UINT24_TO_FLOAT(sample) (((float)sample) / ((float)UINT24_MAX))
 #define I2S_PR_VALUE 0b1100000110 // MCK enabled, odd and I2SDIV = 6 for 96kHz when PLLN = 328 and PLLR = 1
-
 
 
 typedef struct
@@ -50,6 +51,6 @@ typedef struct
 
 typedef struct
 {
-    float* pData;
+    uint32_t* pData;
     uint16_t index;
 } AudioBuffer;

@@ -3,6 +3,8 @@
 #define FRAMEWORK_H
 #endif
 
+extern volatile AudioBuffer captureBuffer;
+
 /*
     PB12  - I2S2_WS
     PB13  - I2S2_CK

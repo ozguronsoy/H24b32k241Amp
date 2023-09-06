@@ -20,6 +20,11 @@
 #define NVIC_H
 #endif
 
+#if !defined(AUDIO_CONTROLS_H)
+#include "AudioControls.h"
+#define AUDIO_CONTROLS_H
+#endif
+
 #if !defined(STDLIB_H)
 #include <stdlib.h>
 #define STDLIB_H
@@ -35,8 +40,8 @@
 volatile uint8_t enableTransmit = 0;
 volatile uint8_t transmitOrder = HIGH;
 /*
-     [0-4096) samples are the old (transmitted) samples, they are necessary for the chorus effect.
-     [4096, 8192) samples are received and yet to be transmitted.
+     [0-RENDER_BUFFER_TRANSMIT_START_INDEX) samples are the old (transmitted) samples, they are necessary for the chorus effect.
+     [RENDER_BUFFER_TRANSMIT_START_INDEX, RENDER_BUFFER_FRAME_COUNT) samples are received and yet to be transmitted.
 */
 volatile AudioBuffer renderBuffer;
 volatile uint32_t transmitSample;
@@ -44,15 +49,15 @@ volatile uint32_t transmitSample;
 uint32_t Render_InitBuffer()
 {
     DEBUG_PRINT("RENDER: Initializing the render buffer\n");
-    const uint32_t renderBufferSize = RENDER_BUFFER_FRAME_COUNT * sizeof(float);
-    renderBuffer.pData = (float *)malloc(renderBufferSize);
+    const uint32_t renderBufferSize = RENDER_BUFFER_FRAME_COUNT * sizeof(uint32_t);
+    renderBuffer.pData = (uint32_t *)malloc(renderBufferSize);
     if (renderBuffer.pData == NULL)
     {
         DEBUG_PRINT("Insufficient memory (render buffer)\n");
         return RESULT_FAIL;
     }
     memset(renderBuffer.pData, 0, renderBufferSize);
-    renderBuffer.index = 4096;
+    renderBuffer.index = RENDER_BUFFER_TRANSMIT_START_INDEX;
 
     return RESULT_SUCCESS;
 }
@@ -94,7 +99,6 @@ uint32_t InitializeRender()
 
     enableTransmit = 0;
     transmitOrder = HIGH;
-    transmitSample = 0;
 
     if (Render_InitBuffer() == RESULT_FAIL)
     {
@@ -120,13 +124,13 @@ void StartRendering()
 
 void SPI3_IRQHandler()
 {
-    // every 1024 sample (after 5119) the effects are applied and buffer is shifted 1024 samples to the left,
-    // hence render the last sample after 5120 while waiting for the next 1024 samples
-    if (enableTransmit && renderBuffer.index < 5120)
+    // every FFT_STEP_SIZE sample (after (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE)) the effects are applied and buffer is shifted FFT_STEP_SIZE samples to the left,
+    // hence render the last sample after (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE) while waiting for the next FFT_STEP_SIZE samples
+    if (enableTransmit && renderBuffer.index < (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE))
     {
         if (transmitOrder == HIGH)
         {
-            transmitSample = FLOAT_TO_UINT24(renderBuffer.pData[renderBuffer.index]);
+            transmitSample = renderBuffer.pData[renderBuffer.index] * audioControls.volume;
             I2S3_REGISTERS->DR = SAMPLE_HO(transmitSample);
         }
         else

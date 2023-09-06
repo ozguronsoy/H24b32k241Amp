@@ -38,11 +38,20 @@
 #define SOUND_EFFECTS_H
 #endif
 
-#define CHECK_RESULT(x) if (x == RESULT_FAIL) { goto LOOP; }
+#include "gpio.h"
+#include <memory.h>
+
+#define CHECK_RESULT(x)   \
+    if (x == RESULT_FAIL) \
+    {                     \
+        goto LOOP;        \
+    }
 
 int main()
 {
     INIT_MONITOR_HANDLES; // debug only
+
+    DEBUG_PRINTF("Total Buffer Memory Usage: %lf KB\n", TOTAL_BUFFER_MEM_USAGE_KB);
 
     RCC_AHB1ENR |= 0b111; // enable the GPIO A, B & C clock
 
@@ -56,7 +65,7 @@ int main()
     StartRendering();
 
 LOOP:
-    while(1);
-    
+    while (1);
+
     return 0;
 }

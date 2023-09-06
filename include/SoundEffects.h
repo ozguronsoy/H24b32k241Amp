@@ -5,7 +5,7 @@
 
 // Allocates memory for the equalizer
 uint32_t InitializeSoundEffects();
-float SFX_Distortion(float sample);
-float SFX_Overdrive(float sample);
-float SFX_Chorus(volatile AudioBuffer* pBuffer);
+uint32_t SFX_Distortion(uint32_t sample);
+uint32_t SFX_Overdrive(uint32_t sample);
+uint32_t SFX_Chorus(volatile AudioBuffer* pBuffer);
 void SFX_Equalizer(volatile AudioBuffer* pInputBuffer, volatile AudioBuffer* pOutputBuffer);

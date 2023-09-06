@@ -44,14 +44,13 @@
 #define I2S2_REGISTERS ((SpiRegisters *)0x40003800u)
 
 volatile uint8_t receiveOrder = HIGH;
-volatile uint32_t receiveSample;
 volatile AudioBuffer captureBuffer;
 
 uint32_t Capture_InitBuffer()
 {
     DEBUG_PRINT("CAPTURE: Initializing the capture buffer\n");
-    const uint32_t captureBufferSize = CAPTURE_BUFFER_FRAME_COUNT * sizeof(float);
-    captureBuffer.pData = (float *)malloc(captureBufferSize);
+    const uint32_t captureBufferSize = CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t);
+    captureBuffer.pData = (uint32_t *)malloc(captureBufferSize);
     if (captureBuffer.pData == NULL)
     {
         DEBUG_PRINT("Insufficient memory (capture buffer)\n");
@@ -123,31 +122,33 @@ void StartCapturing()
 
 void ShiftRenderBuffer()
 {
-    // shift the render buffer to the left by 1024 samples since the first 1024 samples are already transmitted
-    memcpy(renderBuffer.pData, renderBuffer.pData + 1024, 7168);
-    memset(renderBuffer.pData + 7168, 0, 1024);
+    // shift the render buffer to the left by 1024 samples since the first FFT_STEP_SIZE samples are already transmitted
+    uint32_t i;
+    for (i = 0; i < RENDER_BUFFER_FRAME_COUNT; i++)
+    {
+        renderBuffer.pData[i] = (i < (RENDER_BUFFER_FRAME_COUNT - FFT_STEP_SIZE)) ? (renderBuffer.pData[i + FFT_STEP_SIZE]) : (0);
+    }
 }
 
 void ApplyEffects()
 {
     enableTransmit = 0;
- 
+
     ShiftRenderBuffer();
     SFX_Equalizer(&captureBuffer, &renderBuffer);
 
-    for (renderBuffer.index = 4096; renderBuffer.index < 5120; renderBuffer.index++)
+    if (!IsCleanMode())
     {
-        if (!IsCleanMode())
+        for (renderBuffer.index = RENDER_BUFFER_TRANSMIT_START_INDEX; renderBuffer.index < (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE); renderBuffer.index++)
         {
             renderBuffer.pData[renderBuffer.index] = SFX_Chorus(&renderBuffer);
             renderBuffer.pData[renderBuffer.index] = SFX_Overdrive(renderBuffer.pData[renderBuffer.index]);
             renderBuffer.pData[renderBuffer.index] = SFX_Distortion(renderBuffer.pData[renderBuffer.index]);
         }
-        renderBuffer.pData[renderBuffer.index] *= audioControls.volume;
     }
 
-    renderBuffer.index = 4096;
- 
+    renderBuffer.index = RENDER_BUFFER_TRANSMIT_START_INDEX;
+
     enableTransmit = 1;
 }
 
@@ -155,31 +156,28 @@ void SPI2_IRQHandler()
 {
     if (receiveOrder == HIGH)
     {
-        receiveSample = (I2S2_REGISTERS->DR << 8) & 0x00FFFF00;
+        captureBuffer.pData[captureBuffer.index] = (I2S2_REGISTERS->DR << 8) & 0x00FFFF00;
     }
     else
     {
-        receiveSample |= (I2S2_REGISTERS->DR >> 8) & 0x000000FF;
-        
-        captureBuffer.pData[captureBuffer.index] = UINT24_TO_FLOAT(receiveSample);
-        if((++captureBuffer.index) == CAPTURE_BUFFER_FRAME_COUNT)
+        captureBuffer.pData[captureBuffer.index] |= (I2S2_REGISTERS->DR >> 8) & 0x000000FF;
+        if ((++captureBuffer.index) == CAPTURE_BUFFER_FRAME_COUNT)
         {
             captureBuffer.index = 0;
         }
-       
+
         if (enableTransmit)
         {
-            if ((captureBuffer.index % 1024) == 0)
+            if ((captureBuffer.index % FFT_STEP_SIZE) == 0)
             {
                 ApplyEffects();
             }
         }
         else
         {
-            if (captureBuffer.index == 4096) // wait for the first FFT_SIZE of samples to be received, then start applying EQ every 1024 samples received
+            if (captureBuffer.index == 0) // wait for the first FFT_SIZE of samples to be received, then start applying EQ every FFT_STEP_SIZE samples received
             {
                 ApplyEffects();
-                enableTransmit = 1;
             }
         }
     }
