@@ -3,3 +3,4 @@
 #define NVIC_IPR4  (*(uint32_t*)(0xE000E400u + 0x04 * 4))
 #define NVIC_IPR9 (*(uint32_t*)(0xE000E400u + 0x04 * 9))
 #define NVIC_IPR12 (*(uint32_t*)(0xE000E400u + 0x04 * 12))
+#define NVIC_IPR14 (*(uint32_t*)(0xE000E400u + 0x04 * 14))

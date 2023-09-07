@@ -44,7 +44,7 @@
 #define CHECK_RESULT(x)   \
     if (x == RESULT_FAIL) \
     {                     \
-        goto LOOP;        \
+        goto ERROR;       \
     }
 
 int main()
@@ -61,10 +61,13 @@ int main()
     ConfigurePLLI2S();
     CHECK_RESULT(InitializeCapture());
     CHECK_RESULT(InitializeRender());
-    StartCapturing();
-    StartRendering();
+    // StartCapturing();
+    // StartRendering();
 
-LOOP:
+    while (1);
+
+ERROR: // TODO disable IRQs and DMA
+    RCC_AHB1ENR &= ~0b111;
     while (1);
 
     return 0;

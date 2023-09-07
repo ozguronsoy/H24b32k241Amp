@@ -15,6 +15,11 @@
 #define NVIC_H
 #endif
 
+#if !defined(DMA_H)
+#include "dma.h"
+#define DMA_H
+#endif
+
 #if !defined(MEMORY_H)
 #include <memory.h>
 #define MEMORY_H
@@ -25,13 +30,9 @@
 #define MATH_H
 #endif
 
+#define ADC1_REGISTERS ((AdcRegisters *)0x40012000u)
 
-#define ADC_MAX 1023.0f // 10-bit ADC
-#define ADC_NORMALIZED_VALUE (((float)ADC1_REGISTERS->DR) / ADC_MAX)
-#define ADC_NORMALIZED_VALUE_TWO_DIGITS (ceilf(ADC_NORMALIZED_VALUE * 1e2f) * 1e-2f)
-#define ADC1_REGISTERS ((AdcRegisters*)0x40012000u)
-
-typedef volatile struct 
+typedef volatile struct
 {
     uint32_t SR;
     uint32_t CR1;
@@ -56,34 +57,31 @@ typedef volatile struct
     uint32_t CCR;
 } AdcRegisters;
 
-AudioControlsStruct audioControls;
+volatile uint16_t adcBuffer[9];
+AudioControlsStruct audioControls = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
 
-void ADC_IRQHandler();
 void ADC_ConfigureAdcRegisters();
 void ADC_ConfigureGPIORegisters();
+void ADC_ConfigureDmaRegisters();
 
 uint32_t InitializeAudioControls()
 {
     DEBUG_PRINT("AUDIO CONTROLS: Initializing...\n");
 
-    audioControls.bass = 1.0f;
-    audioControls.low_mid = 1.0f;
-    audioControls.high_mid = 1.0f;
-    audioControls.treble = 1.0f;
-    audioControls.volume = 1.0f;
-    audioControls.distortion = 0.0f;
-    audioControls.overdrive = 0.0f;
-    audioControls.chorus_depth = 0.0f;
-    audioControls.chorus_rate = 0.0f;
+    RCC_APB2ENR |= 1 << 8;  // enable the ADC1 clock
+    RCC_AHB1ENR |= 1 << 22; // enable the DMA2 clock
 
-    RCC_APB2ENR |= 1 << 8; // enable the ADC1 clock
-
-    ADC_ConfigureAdcRegisters();
     ADC_ConfigureGPIORegisters();
-    NVIC_ISER0 |= 1 << 18; // enable the ADC IRQ handling
-    NVIC_IPR4 |= 0b00110000 << 24; // set the interrupt priority
+    ADC_ConfigureAdcRegisters();
+    ADC_ConfigureDmaRegisters();
 
-    ADC1_REGISTERS->CR2 |= 1; // ADON
+    NVIC_ISER0 |= 1 << 18;         // enable the ADC IRQ handling (for Overrun)
+    NVIC_IPR4 |= 0b11110000 << 24; // set the interrupt priority
+
+    NVIC_ISER1 |= 1 << 24;    // enable the DMA STREAM0 IRQ handling
+    NVIC_IPR14 |= 0b11100000; // set the interrupt priority
+
+    ADC1_REGISTERS->CR2 |= 1;       // ADON
     ADC1_REGISTERS->CR2 |= 1 << 30; // start conversion
 
     DEBUG_PRINT("AUDIO CONTROLS: initialized successfully\n");
@@ -100,14 +98,20 @@ void ADC_ConfigureAdcRegisters()
 {
     DEBUG_PRINT("AUDIO CONTROLS: Configuring the ADC1 registers\n");
 
-    ADC1_REGISTERS->CR1 |= 0b01 << 24; // 10-bit res
-    ADC1_REGISTERS->CR1 |= 0b1 << 5; // EOC interrupt enabled
-    
-    ADC1_REGISTERS->SMPR2 |= 0b111111111111111000111111111111; // sampling time = 480 cycles 
+    ADC1_REGISTERS->CR1 |= 1 << 26; // overrun interrupt
+    ADC1_REGISTERS->CR1 |= 1 << 8;  // scan mode
+
+    ADC1_REGISTERS->CR2 |= 0b11 << 8; // DMA & DDS
+    ADC1_REGISTERS->CR2 |= 0b10;      // continuous mode
+
+    ADC1_REGISTERS->SMPR2 |= 0b111111111111111000111111111111; // sampling time = 480 cycles
 
     ADC1_REGISTERS->CCR |= 0b11 << 16; // PCLCK2 / 8
 
-    ADC1_REGISTERS->SQR3 = 0; // start from CH_0 (PA0)
+    // 5 bits for each conversion
+    ADC1_REGISTERS->SQR3 = 0b001100010100011000100000100000; // CH0-CH1-CH2-CH3-CH5-CH6
+    ADC1_REGISTERS->SQR2 = 0b010010100000111;                // CH7-CH8-CH9
+    ADC1_REGISTERS->SQR1 = 8 << 20;                          // 9 conversions will occur
 }
 
 void ADC_ConfigureGPIORegisters()
@@ -115,54 +119,57 @@ void ADC_ConfigureGPIORegisters()
     DEBUG_PRINT("AUDIO CONTROLS: Configuring the GPIO registers\n");
 
     GPIOA_REGISTERS->MODER |= 0b1111110011111111; // set PA0, PA1, PA2, PA3, PA5, PA6, and PA7 as analogue mode
-    GPIOB_REGISTERS->MODER |= 0b1111; // set PB0 and PB1 as analogue mode
+    GPIOB_REGISTERS->MODER |= 0b1111;             // set PB0 and PB1 as analogue mode
+}
+
+void ADC_ConfigureDmaRegisters()
+{
+    DEBUG_PRINT("AUDIO CONTROLS: Configuring the DMA registers\n");
+
+    // Memory data size = half-word (16-bit), Peripheral data size = half-word
+    // Memory increment mode enabled
+    DMA2_REGISTERS->S0.CR |= 0b01011 << 10;
+    DMA2_REGISTERS->S0.CR &= ~(0b11 << 6); // data transfer direction = P2M
+    DMA2_REGISTERS->S0.CR |= 1 << 8;       // circular mode
+    DMA2_REGISTERS->S0.CR |= 1 << 4;       // transfer complete interrupt
+    DMA2_REGISTERS->S0.NDTR = 9;
+    DMA2_REGISTERS->S0.PAR = (uint32_t)&ADC1_REGISTERS->DR;
+    DMA2_REGISTERS->S0.M0AR = (uint32_t)adcBuffer;
+    DMA2_REGISTERS->S0.CR |= 1; // enable the DMA
 }
 
 void ADC_IRQHandler()
-{    
-    // conversion order: PA0-PA1-PA2-PA3-PA5-PA6-PA7-PB0-PB1 (CH0-CH1-CH2-CH3-CH5-CH6-CH7-CH8-CH9)
-    switch (ADC1_REGISTERS->SQR3)
+{
+    if ((ADC1_REGISTERS->SR >> 5) & 1)
     {
-    case 0:
-        audioControls.bass = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 1;
-        break;
-    case 1:
-        audioControls.low_mid = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 2;
-        break;
-    case 2:
-        audioControls.high_mid = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 3;
-        break;
-    case 3:
-        audioControls.treble = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 5;
-        break;
-    case 5:
-        audioControls.volume = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 6;
-        break;
-    case 6:
-        audioControls.distortion = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 7;
-        break;
-    case 7:
-        audioControls.overdrive = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 8;
-        break;
-    case 8:
-        audioControls.chorus_depth = ADC_NORMALIZED_VALUE_TWO_DIGITS;
-        ADC1_REGISTERS->SQR3 = 9;
-        break;
-    case 9:
-        audioControls.chorus_rate = ADC_NORMALIZED_VALUE_TWO_DIGITS * 10.0f;
-        ADC1_REGISTERS->SQR3 = 0;
-        break;
-    default:
-        break;
-    }
+        DEBUG_PRINT("ADC OVERRUN OCCURRED!\n");
 
-    ADC1_REGISTERS->SR &= ~(0b10); // clear EOC
-    ADC1_REGISTERS->CR2 |= 1 << 30; // start the next conversion
+        DMA2_REGISTERS->S0.CR &= ~1;
+
+        DMA2_REGISTERS->S0.M0AR = (uint32_t)adcBuffer;
+        DMA2_REGISTERS->S0.NDTR = 9;
+
+        ADC1_REGISTERS->CR2 &= ~(1 << 8); // enable DMA
+        ADC1_REGISTERS->CR2 |= 1 << 8;
+
+        ADC1_REGISTERS->SR &= ~(1 << 5);
+
+        DMA2_REGISTERS->S0.CR |= 1;     // enable the DMA
+        ADC1_REGISTERS->CR2 |= 1 << 30; // start conversion
+    }
+}
+
+void DMA2_Stream0_IRQHandler()
+{
+    audioControls.bass = AUDIO_CONTROLS_NORMALIZE(adcBuffer[0]);
+    audioControls.low_mid = AUDIO_CONTROLS_NORMALIZE(adcBuffer[1]);
+    audioControls.high_mid = AUDIO_CONTROLS_NORMALIZE(adcBuffer[2]);
+    audioControls.treble = AUDIO_CONTROLS_NORMALIZE(adcBuffer[3]);
+    audioControls.volume = AUDIO_CONTROLS_NORMALIZE(adcBuffer[4]);
+    audioControls.distortion = AUDIO_CONTROLS_NORMALIZE(adcBuffer[5]);
+    audioControls.overdrive = AUDIO_CONTROLS_NORMALIZE(adcBuffer[6]);
+    audioControls.chorus_depth = AUDIO_CONTROLS_NORMALIZE(adcBuffer[7]);
+    audioControls.chorus_rate = AUDIO_CONTROLS_NORMALIZE(adcBuffer[8]) * 10.0f;
+
+    DMA2_REGISTERS->LIFCR |= 1 << 5;
 }
