@@ -57,8 +57,7 @@ typedef volatile struct
     uint32_t CCR;
 } AdcRegisters;
 
-volatile uint16_t adcBuffer[9];
-AudioControlsStruct audioControls = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+AudioControlsStruct audioControls = {ADC_MAX, ADC_MAX, ADC_MAX, ADC_MAX, ADC_MAX, 0u, 0u, 0u, 0u};
 
 void ADC_ConfigureAdcRegisters();
 void ADC_ConfigureGPIORegisters();
@@ -77,9 +76,6 @@ uint32_t InitializeAudioControls()
 
     NVIC_ISER0 |= 1 << 18;         // enable the ADC IRQ handling (for Overrun)
     NVIC_IPR4 |= 0b11110000 << 24; // set the interrupt priority
-
-    NVIC_ISER1 |= 1 << 24;    // enable the DMA STREAM0 IRQ handling
-    NVIC_IPR14 |= 0b11100000; // set the interrupt priority
 
     ADC1_REGISTERS->CR2 |= 1;       // ADON
     ADC1_REGISTERS->CR2 |= 1 << 30; // start conversion
@@ -131,10 +127,9 @@ void ADC_ConfigureDmaRegisters()
     DMA2_REGISTERS->S0.CR |= 0b01011 << 10;
     DMA2_REGISTERS->S0.CR &= ~(0b11 << 6); // data transfer direction = P2M
     DMA2_REGISTERS->S0.CR |= 1 << 8;       // circular mode
-    DMA2_REGISTERS->S0.CR |= 1 << 4;       // transfer complete interrupt
     DMA2_REGISTERS->S0.NDTR = 9;
     DMA2_REGISTERS->S0.PAR = (uint32_t)&ADC1_REGISTERS->DR;
-    DMA2_REGISTERS->S0.M0AR = (uint32_t)adcBuffer;
+    DMA2_REGISTERS->S0.M0AR = (uint32_t)&audioControls;
     DMA2_REGISTERS->S0.CR |= 1; // enable the DMA
 }
 
@@ -146,7 +141,7 @@ void ADC_IRQHandler()
 
         DMA2_REGISTERS->S0.CR &= ~1;
 
-        DMA2_REGISTERS->S0.M0AR = (uint32_t)adcBuffer;
+        DMA2_REGISTERS->S0.M0AR = (uint32_t)&audioControls;
         DMA2_REGISTERS->S0.NDTR = 9;
 
         ADC1_REGISTERS->CR2 &= ~(1 << 8); // enable DMA
@@ -157,19 +152,4 @@ void ADC_IRQHandler()
         DMA2_REGISTERS->S0.CR |= 1;     // enable the DMA
         ADC1_REGISTERS->CR2 |= 1 << 30; // start conversion
     }
-}
-
-void DMA2_Stream0_IRQHandler()
-{
-    audioControls.bass = AUDIO_CONTROLS_NORMALIZE(adcBuffer[0]);
-    audioControls.low_mid = AUDIO_CONTROLS_NORMALIZE(adcBuffer[1]);
-    audioControls.high_mid = AUDIO_CONTROLS_NORMALIZE(adcBuffer[2]);
-    audioControls.treble = AUDIO_CONTROLS_NORMALIZE(adcBuffer[3]);
-    audioControls.volume = AUDIO_CONTROLS_NORMALIZE(adcBuffer[4]);
-    audioControls.distortion = AUDIO_CONTROLS_NORMALIZE(adcBuffer[5]);
-    audioControls.overdrive = AUDIO_CONTROLS_NORMALIZE(adcBuffer[6]);
-    audioControls.chorus_depth = AUDIO_CONTROLS_NORMALIZE(adcBuffer[7]);
-    audioControls.chorus_rate = AUDIO_CONTROLS_NORMALIZE(adcBuffer[8]) * 10.0f;
-
-    DMA2_REGISTERS->LIFCR |= 1 << 5;
 }

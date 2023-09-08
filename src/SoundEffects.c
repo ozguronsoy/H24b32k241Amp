@@ -100,7 +100,7 @@ uint32_t InitializeSoundEffects()
 
 uint32_t SFX_Distortion(uint32_t sample)
 {
-    volatile const float d = audioControls.distortion;
+    volatile const float d = AUDIO_CONTROLS_NORMALIZE(audioControls.distortion);
     
     const uint32_t u = DISTORTION_UPPER_BOUNDARY(d);
     if (sample > u)
@@ -119,7 +119,7 @@ uint32_t SFX_Distortion(uint32_t sample)
 
 uint32_t SFX_Overdrive(uint32_t sample)
 {
-    volatile const float a = sinf(audioControls.overdrive * PI * 0.5f);
+    volatile const float a = sinf(AUDIO_CONTROLS_NORMALIZE(audioControls.overdrive) * PI * 0.5f);
     const float k = 2.0f * a / (1.0f - a);
     const float fsample = INPUT_RANGE(UINT24_TO_FLOAT(sample));
     return OUTPUT_RANGE(((1.0f + k) * sample / (1.0f + k * fabsf(fsample)))) * UINT24_MAX;
@@ -127,8 +127,8 @@ uint32_t SFX_Overdrive(uint32_t sample)
 
 uint32_t SFX_Chorus(volatile AudioBuffer* pBuffer)
 {
-    volatile const float rate = audioControls.chorus_rate;
-    volatile const float wet = audioControls.chorus_depth * 0.5f;
+    volatile const float rate = AUDIO_CONTROLS_NORMALIZE(audioControls.chorus_rate);
+    volatile const float wet = AUDIO_CONTROLS_NORMALIZE(audioControls.chorus_depth) * 0.5f;
 
     if (rate == 0 || wet == 0)
     {
@@ -157,10 +157,10 @@ void SFX_Equalizer(volatile AudioBuffer* pInputBuffer, volatile AudioBuffer* pOu
 
     arm_cfft_f32(&EQ_CFFT_STRUCT, (float*)&pComplexBuffer->re, 0, 1);
 
-    volatile const float bass = audioControls.bass;
-    volatile const float low_mid = audioControls.low_mid;
-    volatile const float high_mid = audioControls.high_mid;
-    volatile const float treble = audioControls.treble;
+    volatile const float bass = AUDIO_CONTROLS_NORMALIZE(audioControls.bass);
+    volatile const float low_mid = AUDIO_CONTROLS_NORMALIZE(audioControls.low_mid);
+    volatile const float high_mid = AUDIO_CONTROLS_NORMALIZE(audioControls.high_mid);
+    volatile const float treble = AUDIO_CONTROLS_NORMALIZE(audioControls.treble);
 
     for (i = 0; i < EQ_BIN_START_L_MID; i++)
     {

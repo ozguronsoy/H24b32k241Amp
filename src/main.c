@@ -66,7 +66,7 @@ int main()
 
     while (1);
 
-ERROR: // TODO disable IRQs and DMA
+ERROR: // TODO disable IRQs and DMA and peripherals
     RCC_AHB1ENR &= ~0b111;
     while (1);
 

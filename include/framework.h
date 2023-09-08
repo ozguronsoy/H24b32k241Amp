@@ -27,8 +27,8 @@ extern int initialise_monitor_handles();
 #define PIN_STATE_HIGH 1u
 #define PIN_STATE_LOW 0u
 #define PI 3.14159265358979323846f
-#define FFT_STEP_SIZE 256u
-#define FFT_SIZE 1024u
+#define FFT_STEP_SIZE 1024u
+#define FFT_SIZE 4096u
 #define CAPTURE_BUFFER_FRAME_COUNT FFT_SIZE
 #define RENDER_BUFFER_FRAME_COUNT 9600u
 #define RENDER_BUFFER_TRANSMIT_START_INDEX (RENDER_BUFFER_FRAME_COUNT / 2) // the first half of the buffer is for the old (rendered) samples

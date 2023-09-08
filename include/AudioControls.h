@@ -3,20 +3,25 @@
 #define FRAMEWORK_H
 #endif
 
+#if !defined(MATH_H)
+#include <math.h>
+#define MATH_H
+#endif
+
 #define ADC_MAX 4095u // 12-bit ADC
 #define AUDIO_CONTROLS_NORMALIZE(x) (ceilf((((float)x) / ((float)ADC_MAX)) * 1e2f) * 1e-2f) // two digits
 
 typedef volatile struct
 {
-    float bass;
-    float low_mid;
-    float high_mid;
-    float treble;
-    float volume;
-    float distortion;
-    float overdrive;
-    float chorus_depth;
-    float chorus_rate; // LFO frequency
+    uint16_t bass;
+    uint16_t low_mid;
+    uint16_t high_mid;
+    uint16_t treble;
+    uint16_t volume;
+    uint16_t distortion;
+    uint16_t overdrive;
+    uint16_t chorus_depth;
+    uint16_t chorus_rate; // LFO frequency
 } AudioControlsStruct;
 
 extern AudioControlsStruct audioControls;
