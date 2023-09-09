@@ -20,6 +20,11 @@
 #define NVIC_H
 #endif
 
+#if !defined(DMA_H)
+#include "dma.h"
+#define DMA_H
+#endif
+
 #if !defined(AUDIO_CONTROLS_H)
 #include "AudioControls.h"
 #define AUDIO_CONTROLS_H
@@ -37,27 +42,49 @@
 
 #define I2S3_REGISTERS ((SpiRegisters *)0x40003C00u)
 
-volatile uint8_t enableTransmit = 0;
-volatile uint8_t transmitOrder = HIGH;
 /*
-     [0-RENDER_BUFFER_TRANSMIT_START_INDEX) samples are the old (transmitted) samples, they are necessary for the chorus effect.
-     [RENDER_BUFFER_TRANSMIT_START_INDEX, RENDER_BUFFER_FRAME_COUNT) samples are received and yet to be transmitted.
+     -[0, RENDER_BUFFER_TRANSMIT_START_INDEX) samples are the old (transmitted) samples, they are necessary for the chorus effect.
+
+     -[RENDER_BUFFER_TRANSMIT_START_INDEX, RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE) is the render region, the data will be transfered to the available render buffer.
+
+     -[RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE, RENDER_BUFFER_FRAME_COUNT) future data, needs to be processed before transmitting.
+*/
+volatile AudioBuffer processBuffer;
+
+/*
+    -DMA transfer buffer (double-bufferd).
+
+    -[0, FFT_STEP_SIZE) is the first buffer.
+
+    -[FFT_STEP_SIZE, 2 * FFT_STEP_SIZE) is the second buffer.
+
+    -The index parameter is used to indicate which buffer is the current target for the DMA.
 */
 volatile AudioBuffer renderBuffer;
-volatile uint32_t transmitSample;
 
 uint32_t Render_InitBuffer()
 {
+    DEBUG_PRINT("RENDER: Initializing the process buffer\n");
+    uint32_t bufferSize = PROCESS_BUFFER_FRAME_COUNT * sizeof(uint32_t);
+    processBuffer.pData = (uint32_t *)malloc(bufferSize);
+    if (processBuffer.pData == NULL)
+    {
+        DEBUG_PRINT("Insufficient memory (process buffer)\n");
+        return RESULT_FAIL;
+    }
+    memset(processBuffer.pData, 0, bufferSize);
+    processBuffer.index = PROCESS_BUFFER_TRANSMIT_START_INDEX;
+
     DEBUG_PRINT("RENDER: Initializing the render buffer\n");
-    const uint32_t renderBufferSize = RENDER_BUFFER_FRAME_COUNT * sizeof(uint32_t);
-    renderBuffer.pData = (uint32_t *)malloc(renderBufferSize);
+    bufferSize = RENDER_BUFFER_FRAME_COUNT * sizeof(uint32_t);
+    renderBuffer.pData = (uint32_t *)malloc(bufferSize);
     if (renderBuffer.pData == NULL)
     {
         DEBUG_PRINT("Insufficient memory (render buffer)\n");
         return RESULT_FAIL;
     }
-    memset(renderBuffer.pData, 0, renderBufferSize);
-    renderBuffer.index = RENDER_BUFFER_TRANSMIT_START_INDEX;
+    memset(renderBuffer.pData, 0, bufferSize);
+    renderBuffer.index = 0;
 
     return RESULT_SUCCESS;
 }
@@ -65,7 +92,8 @@ uint32_t Render_InitBuffer()
 void Render_ConfigureRCC()
 {
     DEBUG_PRINT("RENDER: Configuring the RCC for I2S3\n");
-    RCC_APB1ENR |= 0b1 << 15; // enable the SPI3 clock
+    RCC_APB1ENR |= 1 << 15; // enable the SPI3 clock
+    RCC_AHB1ENR |= 1 << 21; // enable the DMA1 clock
 }
 
 void Render_ConfigureGPIORegisters()
@@ -87,18 +115,32 @@ void Render_ConfigureI2SRegisters()
 {
     DEBUG_PRINT("RENDER: Configuring the I2S3 registers\n");
 
-    I2S3_REGISTERS->CR2 |= 1 << 7;          // enable the I2S3 transmit IRQ handling
     I2S3_REGISTERS->I2SCFGR |= 0b1010 << 8; // select the I2S mode as master-transmit
     I2S3_REGISTERS->I2SCFGR |= 0b010011;    // steady state low, 24-bit data, 32 bit container, MSB (left) justified
-    I2S3_REGISTERS->I2SPR |= I2S_PR_VALUE;
+    I2S3_REGISTERS->I2SPR = I2S_PR_VALUE;
+    I2S3_REGISTERS->CR2 |= 0b10; // Transmit DMA enabled
+}
+
+void Render_ConfigureDmaRegisters()
+{
+    DEBUG_PRINT("RENDER: Configuring the DMA registers\n");
+
+    // Memory data size = half-word (16-bit), Peripheral data size = half-word
+    // Memory increment mode enabled
+    DMA1_REGISTERS->S5.CR |= 0b01011 << 10;
+    DMA1_REGISTERS->S5.CR |= 0b111 << 16;        // Double buffer mode, very high priority
+    DMA1_REGISTERS->S5.CR |= 0b101 << 6;         // circular mode, data direction = M2P
+    DMA1_REGISTERS->S5.CR |= 1 << 4;             // transfer complete interrupt
+    DMA1_REGISTERS->S5.NDTR = 2 * FFT_STEP_SIZE; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
+    DMA1_REGISTERS->S5.PAR = (uint32_t)&I2S3_REGISTERS->DR;
+    DMA1_REGISTERS->S5.M0AR = (uint32_t)renderBuffer.pData;
+    DMA1_REGISTERS->S5.M1AR = (uint32_t)(renderBuffer.pData + FFT_STEP_SIZE);
+    DMA1_REGISTERS->S5.CR |= 1; // enable the DMA
 }
 
 uint32_t InitializeRender()
 {
     DEBUG_PRINT("RENDER: initializing...\n");
-
-    enableTransmit = 0;
-    transmitOrder = HIGH;
 
     if (Render_InitBuffer() == RESULT_FAIL)
     {
@@ -108,9 +150,9 @@ uint32_t InitializeRender()
     Render_ConfigureRCC();
     Render_ConfigureGPIORegisters();
     Render_ConfigureI2SRegisters();
+    Render_ConfigureDmaRegisters();
 
-    NVIC_ISER1 |= 1 << 19;          // enable the SPI3 interrupt
-    NVIC_IPR12 |= 0b00010000 << 24; // set the interrupt priority
+    NVIC_ISER0 |= 1 << 16; // enable DMA1_Stream5 IRQ handler
 
     DEBUG_PRINT("RENDER: initialized successfully\n");
 
@@ -119,29 +161,23 @@ uint32_t InitializeRender()
 
 void StartRendering()
 {
-    I2S3_REGISTERS->I2SCFGR |= 1 << 10; // enable the I2S peripheral
+    I2S3_REGISTERS->I2SCFGR |= 1 << 10;
 }
 
-void SPI3_IRQHandler()
+void ShiftProcessBuffer()
 {
-    // every FFT_STEP_SIZE sample (after (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE)) the effects are applied and buffer is shifted FFT_STEP_SIZE samples to the left,
-    // hence render the last sample after (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE) while waiting for the next FFT_STEP_SIZE samples
-    if (enableTransmit && renderBuffer.index < (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE))
+    uint32_t i;
+    for (i = 0; i < (PROCESS_BUFFER_FRAME_COUNT - FFT_STEP_SIZE); i++)
     {
-        if (transmitOrder == HIGH)
-        {
-            transmitSample = renderBuffer.pData[renderBuffer.index] * audioControls.volume;
-            I2S3_REGISTERS->DR = SAMPLE_HO(transmitSample);
-        }
-        else
-        {
-            I2S3_REGISTERS->DR = SAMPLE_LO(transmitSample);
-            renderBuffer.index++;
-        }
+        processBuffer.pData[i] = processBuffer.pData[i + FFT_STEP_SIZE];
     }
-    else
+    for (; i < PROCESS_BUFFER_FRAME_COUNT; i++)
     {
-        I2S3_REGISTERS->DR = (transmitOrder == HIGH) ? SAMPLE_HO(transmitSample) : SAMPLE_LO(transmitSample);
+        processBuffer.pData[i] = 0;
     }
-    transmitOrder ^= 1;
+}
+
+void DMA1_Stream5_IRQHandler()
+{
+    renderBuffer.index ^= (RENDER_BUFFER_FRAME_COUNT / 2);
 }

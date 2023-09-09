@@ -6,10 +6,7 @@
 extern volatile AudioBuffer captureBuffer;
 
 /*
-    PB12  - I2S2_WS
-    PB13  - I2S2_CK
-    PB15  - I2S2_SD
-    PC6   - I2S2_MCK
+    PB4  - I2S3ext_SD
 */
 uint32_t InitializeCapture();
 void StartCapturing();

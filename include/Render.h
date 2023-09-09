@@ -3,8 +3,7 @@
 #define FRAMEWORK_H
 #endif
 
-
-extern volatile uint8_t enableTransmit;
+extern volatile AudioBuffer processBuffer;
 extern volatile AudioBuffer renderBuffer;
 
 /*
@@ -15,3 +14,4 @@ extern volatile AudioBuffer renderBuffer;
 */
 uint32_t InitializeRender();
 void StartRendering();
+void ShiftProcessBuffer();

@@ -21,7 +21,6 @@
 #include "arm_math.h"
 #include "arm_common_tables.h"
 #include "arm_const_structs.h"
-#include "Fourier.h"
 
 
 #define INPUT_RANGE(sample) (((sample) * 2.0f) - 1.0f) // [0, 1] -> [-1, 1]
@@ -33,9 +32,9 @@
 
 #define CHORUS_LFO_DT (1.0f / ((float)SAMPLE_RATE))
 #define CHORUS_BASE_DELAY_MS 3u
-#define CHORUS_BASE_DELAY_SAMPLE (CHORUS_BASE_DELAY_MS * SAMPLE_RATE / 1000) // the delay will be between [BASE_DELAY_MS, (BASE_DELAY_MS + DELAY_MS)]
+#define CHORUS_BASE_DELAY_SAMPLE (CHORUS_BASE_DELAY_MS * SAMPLE_RATE / 1000u) // the delay will be between [BASE_DELAY_MS, (BASE_DELAY_MS + DELAY_MS)]
 #define CHORUS_DELAY_MS 30u
-#define CHORUS_DELAY_SAMPLE (CHORUS_DELAY_MS * SAMPLE_RATE / 1000)
+#define CHORUS_DELAY_SAMPLE (CHORUS_DELAY_MS * SAMPLE_RATE / 1000u)
 // fs * (pow(2, semitone / 12) - 1.0)
 // 0.75 semitone
 #define CHORUS_RESAMPLE_DELTA 4250u
@@ -119,7 +118,7 @@ uint32_t SFX_Distortion(uint32_t sample)
 
 uint32_t SFX_Overdrive(uint32_t sample)
 {
-    volatile const float a = sinf(AUDIO_CONTROLS_NORMALIZE(audioControls.overdrive) * PI * 0.5f);
+    volatile const float a = arm_sin_f32(AUDIO_CONTROLS_NORMALIZE(audioControls.overdrive) * PI * 0.5f);
     const float k = 2.0f * a / (1.0f - a);
     const float fsample = INPUT_RANGE(UINT24_TO_FLOAT(sample));
     return OUTPUT_RANGE(((1.0f + k) * sample / (1.0f + k * fabsf(fsample)))) * UINT24_MAX;
@@ -135,7 +134,7 @@ uint32_t SFX_Chorus(volatile AudioBuffer* pBuffer)
         return pBuffer->pData[pBuffer->index];
     }
 
-    const float lfoSample = (sinf(2.0f * PI * rate * chorus_t_LFO) + 1.0f) * 0.5f;
+    const float lfoSample = (arm_sin_f32(2.0f * PI * rate * chorus_t_LFO) + 1.0f) * 0.5f;
     const uint16_t currentDelay_sample = roundf(lfoSample * CHORUS_DELAY_SAMPLE + CHORUS_BASE_DELAY_SAMPLE); // n samples of delay
     const float resampleIndex = (pBuffer->index - currentDelay_sample) + lfoSample * CHORUS_RESAMPLE_DELTA;
     const float resampleFactor = resampleIndex - floorf(resampleIndex);
@@ -151,7 +150,7 @@ void SFX_Equalizer(volatile AudioBuffer* pInputBuffer, volatile AudioBuffer* pOu
     uint32_t i;
     for (i = 0; i < FFT_SIZE; i++)
     {
-        pComplexBuffer[i].re = UINT24_TO_FLOAT(pInputBuffer->pData[(pInputBuffer->index + RENDER_BUFFER_TRANSMIT_START_INDEX + i) % CAPTURE_BUFFER_FRAME_COUNT]);
+        pComplexBuffer[i].re = UINT24_TO_FLOAT(pInputBuffer->pData[(pInputBuffer->index + PROCESS_BUFFER_TRANSMIT_START_INDEX + i) % CAPTURE_BUFFER_FRAME_COUNT]);
         pComplexBuffer[i].im = 0.0f;
     }
 
@@ -191,6 +190,6 @@ void SFX_Equalizer(volatile AudioBuffer* pInputBuffer, volatile AudioBuffer* pOu
 
     for (i = 0; i < FFT_SIZE; i++)
     {
-        pOutputBuffer->pData[i + RENDER_BUFFER_TRANSMIT_START_INDEX] += FLOAT_TO_UINT24(pComplexBuffer[i].re * hannBuffer[i] / FFT_SIZE);
+        pOutputBuffer->pData[i + PROCESS_BUFFER_TRANSMIT_START_INDEX] += FLOAT_TO_UINT24(pComplexBuffer[i].re * hannBuffer[i] / FFT_SIZE);
     }
 }

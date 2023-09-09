@@ -85,6 +85,19 @@ uint32_t InitializeAudioControls()
     return RESULT_SUCCESS;
 }
 
+void DeinitializeAudioControls()
+{
+    NVIC_ISER0 &= ~(1 << 18);
+    NVIC_IPR4 &= ~(0b11110000 << 24);
+
+    DMA2_REGISTERS->S0.CR &= ~1;
+
+    ADC1_REGISTERS->CR2 &= ~1;
+
+    RCC_APB2ENR &= ~(1 << 8);
+    RCC_AHB1ENR &= ~(1 << 22);
+}
+
 uint32_t IsCleanMode()
 {
     return (GPIOB_REGISTERS->IDR >> 14) & 1;

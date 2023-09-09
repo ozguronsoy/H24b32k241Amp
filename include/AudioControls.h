@@ -40,5 +40,6 @@ extern AudioControlsStruct audioControls;
     conversion order: PA0-PA1-PA2-PA3-PA5-PA6-PA7-PB0-PB1 (CH0-CH1-CH2-CH3-CH5-CH6-CH7-CH8-CH9)
 */
 uint32_t InitializeAudioControls();
+void DeinitializeAudioControls();
 // PB14 HIGH = Clean Mode
 uint32_t IsCleanMode();

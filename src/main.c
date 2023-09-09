@@ -51,6 +51,8 @@ int main()
 {
     INIT_MONITOR_HANDLES; // debug only
 
+    RCC_ConfigureSystemClock();
+
     DEBUG_PRINTF("Total Buffer Memory Usage: %lf KB\n", TOTAL_BUFFER_MEM_USAGE_KB);
 
     RCC_AHB1ENR |= 0b111; // enable the GPIO A, B & C clock
@@ -58,15 +60,17 @@ int main()
     CHECK_RESULT(ConfigureDAC());
     CHECK_RESULT(InitializeSoundEffects());
     CHECK_RESULT(InitializeAudioControls());
+    
     ConfigurePLLI2S();
-    CHECK_RESULT(InitializeCapture());
     CHECK_RESULT(InitializeRender());
-    // StartCapturing();
-    // StartRendering();
+    CHECK_RESULT(InitializeCapture());
+    StartRendering();
+    StartCapturing();
 
     while (1);
 
 ERROR: // TODO disable IRQs and DMA and peripherals
+    DeinitializeAudioControls();
     RCC_AHB1ENR &= ~0b111;
     while (1);
 

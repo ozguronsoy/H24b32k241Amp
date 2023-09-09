@@ -21,6 +21,11 @@
 #define NVIC_H
 #endif
 
+#if !defined(DMA_H)
+#include "dma.h"
+#define DMA_H
+#endif
+
 #if !defined(SOUND_EFFECTS_H)
 #include "SoundEffects.h"
 #define SOUND_EFFECTS_H
@@ -41,9 +46,9 @@
 #define MEMORY_H
 #endif
 
-#define I2S2_REGISTERS ((SpiRegisters *)0x40003800u)
+#define I2S3EXT_REGISTERS ((SpiRegisters *)0x40004000u)
 
-volatile uint8_t receiveOrder = HIGH;
+volatile uint32_t offset;
 volatile AudioBuffer captureBuffer;
 
 uint32_t Capture_InitBuffer()
@@ -62,53 +67,57 @@ uint32_t Capture_InitBuffer()
     return RESULT_SUCCESS;
 }
 
-void Capture_ConfigureRCC()
-{
-    DEBUG_PRINT("CAPTURE: Configuring the RCC for I2S2\n");
-    RCC_APB1ENR |= 0b1 << 14; // enable the SPI2 clock
-}
-
 void Capture_ConfigureGPIORegisters()
 {
-    DEBUG_PRINT("CAPTURE: Configuring the I2S2 GPIO registers\n");
+    DEBUG_PRINT("CAPTURE: Configuring the I2S3ext GPIO registers\n");
 
-    // set to alternate function mode
-    GPIOB_REGISTERS->MODER |= 0b10001010 << 24;
-    GPIOC_REGISTERS->MODER |= 0b10 << 12;
-
-    // alternate function mapping
-    GPIOB_REGISTERS->AFRH |= 0b0101000001010101 << 16;
-    GPIOC_REGISTERS->AFRL |= 0b0101 << 24;
+    GPIOB_REGISTERS->MODER |= 0b10 << 7;
+    GPIOB_REGISTERS->AFRL |= 0b0111 << 16;
 }
 
 void Capture_ConfigureI2SRegisters()
 {
-    DEBUG_PRINT("CAPTURE: Configuring the I2S2 registers\n");
+    DEBUG_PRINT("CAPTURE: Configuring the I2S3ext registers\n");
 
-    // ENTERS AN INFINITE LOOP FOR SOME REASON
-    I2S2_REGISTERS->CR2 |= 1 << 6;          // enable the I2S2 receive IRQ handling
-    I2S2_REGISTERS->I2SCFGR |= 0b1011 << 8; // select the I2S mode as master-receive
-    I2S2_REGISTERS->I2SCFGR |= 0b010011;    // steady state low, 24-bit data, 32 bit container, MSB (left) justified
-    I2S2_REGISTERS->I2SPR |= I2S_PR_VALUE;
+    I2S3EXT_REGISTERS->I2SCFGR |= 0b1011 << 8; // select the I2S mode as master-receive
+    I2S3EXT_REGISTERS->I2SCFGR |= 0b010011;    // steady state low, 24-bit data, 32 bit container, MSB (left) justified
+    I2S3EXT_REGISTERS->I2SPR = I2S_PR_VALUE;
+    I2S3EXT_REGISTERS->CR2 |= 1; // Receive DMA enabled
+}
+
+void Capture_ConfigureDmaRegisters()
+{
+    DEBUG_PRINT("CAPTURE: Configuring the DMA registers\n");
+
+    // Memory data size = half-word (16-bit), Peripheral data size = half-word
+    // Memory increment mode enabled
+    DMA1_REGISTERS->S0.CR |= 0b01011 << 10;
+    DMA1_REGISTERS->S0.CR |= 3 << 25;       // channel 3
+    DMA1_REGISTERS->S0.CR |= 0b11 << 16;    // very high priority
+    DMA1_REGISTERS->S0.CR &= ~(0b11 << 6);  // data direction = P2M
+    DMA1_REGISTERS->S0.CR |= 1 << 4;        // transfer complete interrupt
+    DMA1_REGISTERS->S0.NDTR = 2 * FFT_SIZE; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
+    DMA1_REGISTERS->S0.PAR = (uint32_t)&I2S3EXT_REGISTERS->DR;
+    DMA1_REGISTERS->S0.M0AR = (uint32_t)captureBuffer.pData;
+    DMA1_REGISTERS->S0.CR |= 1; // enable the DMA
 }
 
 uint32_t InitializeCapture()
 {
     DEBUG_PRINT("CAPTURE: initializing...\n");
 
-    receiveOrder = HIGH;
+    offset = (FFT_SIZE - FFT_STEP_SIZE);
 
     if (Capture_InitBuffer() == RESULT_FAIL)
     {
         return RESULT_FAIL;
     }
 
-    Capture_ConfigureRCC();
     Capture_ConfigureGPIORegisters();
     Capture_ConfigureI2SRegisters();
+    Capture_ConfigureDmaRegisters();
 
-    NVIC_ISER1 |= 1 << 4;    // enable the SPI2 interrupt
-    NVIC_IPR9 |= 0b00100000; // set the interrupt priority
+    NVIC_ISER0 |= 1 << 11; // enable DMA1_Stream0 IRQ handler
 
     DEBUG_PRINT("CAPTURE: initialized successfully\n");
 
@@ -117,69 +126,34 @@ uint32_t InitializeCapture()
 
 void StartCapturing()
 {
-    I2S2_REGISTERS->I2SCFGR |= 1 << 10; // enable the I2S peripheral
-}
-
-void ShiftRenderBuffer()
-{
-    // shift the render buffer to the left by 1024 samples since the first FFT_STEP_SIZE samples are already transmitted
-    uint32_t i;
-    for (i = 0; i < RENDER_BUFFER_FRAME_COUNT; i++)
-    {
-        renderBuffer.pData[i] = (i < (RENDER_BUFFER_FRAME_COUNT - FFT_STEP_SIZE)) ? (renderBuffer.pData[i + FFT_STEP_SIZE]) : (0);
-    }
+    I2S3EXT_REGISTERS->I2SCFGR |= 1 << 10;
 }
 
 void ApplyEffects()
 {
-    enableTransmit = 0;
+    ShiftProcessBuffer();
+    SFX_Equalizer(&captureBuffer, &processBuffer);
 
-    ShiftRenderBuffer();
-    SFX_Equalizer(&captureBuffer, &renderBuffer);
+    volatile const float volume = AUDIO_CONTROLS_NORMALIZE(audioControls.volume);
 
-    if (!IsCleanMode())
+    uint32_t i, j;
+    for (i = PROCESS_BUFFER_TRANSMIT_START_INDEX, j = renderBuffer.index; i < (PROCESS_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE); i++, j++)
     {
-        for (renderBuffer.index = RENDER_BUFFER_TRANSMIT_START_INDEX; renderBuffer.index < (RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE); renderBuffer.index++)
+        if (!IsCleanMode())
         {
-            renderBuffer.pData[renderBuffer.index] = SFX_Chorus(&renderBuffer);
-            renderBuffer.pData[renderBuffer.index] = SFX_Overdrive(renderBuffer.pData[renderBuffer.index]);
-            renderBuffer.pData[renderBuffer.index] = SFX_Distortion(renderBuffer.pData[renderBuffer.index]);
+            processBuffer.pData[i] = SFX_Chorus(&processBuffer);
+            processBuffer.pData[i] = SFX_Overdrive(processBuffer.pData[i]);
+            processBuffer.pData[i] = SFX_Distortion(processBuffer.pData[i]);
         }
+        renderBuffer.pData[j] = processBuffer.pData[i] * volume;
     }
-
-    renderBuffer.index = RENDER_BUFFER_TRANSMIT_START_INDEX;
-
-    enableTransmit = 1;
 }
 
-void SPI2_IRQHandler()
+void DMA1_Stream0_IRQHandler()
 {
-    if (receiveOrder == HIGH)
-    {
-        captureBuffer.pData[captureBuffer.index] = (I2S2_REGISTERS->DR << 8) & 0x00FFFF00;
-    }
-    else
-    {
-        captureBuffer.pData[captureBuffer.index] |= (I2S2_REGISTERS->DR >> 8) & 0x000000FF;
-        if ((++captureBuffer.index) == CAPTURE_BUFFER_FRAME_COUNT)
-        {
-            captureBuffer.index = 0;
-        }
-
-        if (enableTransmit)
-        {
-            if ((captureBuffer.index % FFT_STEP_SIZE) == 0)
-            {
-                ApplyEffects();
-            }
-        }
-        else
-        {
-            if (captureBuffer.index == 0) // wait for the first FFT_SIZE of samples to be received, then start applying EQ every FFT_STEP_SIZE samples received
-            {
-                ApplyEffects();
-            }
-        }
-    }
-    receiveOrder ^= 1;
+    offset = (offset + FFT_STEP_SIZE) % CAPTURE_BUFFER_FRAME_COUNT;
+    DMA1_REGISTERS->S0.M0AR = (uint32_t)(captureBuffer.pData + offset);
+    DMA1_REGISTERS->S0.NDTR = 2 * FFT_STEP_SIZE;
+    DMA1_REGISTERS->S0.CR |= 1; // enable the DMA
+    ApplyEffects();
 }
