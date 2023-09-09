@@ -40,7 +40,7 @@
 #define CHORUS_RESAMPLE_DELTA 4250u
 
 
-#define EQ_NYQUIST (FFT_SIZE >> 1)
+#define EQ_NYQUIST (FFT_SIZE / 2)
 #define EQ_BIN_START_L_MID 7u    // 160 Hz
 #define EQ_BIN_START_H_MID 31u   // 720 Hz
 #define EQ_BIN_START_TREBLE 55u  // 1280 Hz
@@ -135,12 +135,12 @@ uint32_t SFX_Chorus(volatile AudioBuffer* pBuffer)
     }
 
     const float lfoSample = (arm_sin_f32(2.0f * PI * rate * chorus_t_LFO) + 1.0f) * 0.5f;
-    const uint16_t currentDelay_sample = roundf(lfoSample * CHORUS_DELAY_SAMPLE + CHORUS_BASE_DELAY_SAMPLE); // n samples of delay
+    const uint16_t currentDelay_sample = roundf(lfoSample * (CHORUS_DELAY_SAMPLE) + (CHORUS_BASE_DELAY_SAMPLE)); // n samples of delay
     const float resampleIndex = (pBuffer->index - currentDelay_sample) + lfoSample * CHORUS_RESAMPLE_DELTA;
     const float resampleFactor = resampleIndex - floorf(resampleIndex);
     const uint16_t roundedResampleIndex = roundf(resampleIndex);
         
-    chorus_t_LFO += CHORUS_LFO_DT;
+    chorus_t_LFO += (CHORUS_LFO_DT);
 
     return pBuffer->pData[pBuffer->index] * (1.0f - wet) + (pBuffer->pData[roundedResampleIndex] * (1.0f - resampleFactor) + pBuffer->pData[roundedResampleIndex + 1] * resampleFactor) * wet;
 }
@@ -148,9 +148,10 @@ uint32_t SFX_Chorus(volatile AudioBuffer* pBuffer)
 void SFX_Equalizer(volatile AudioBuffer* pInputBuffer, volatile AudioBuffer* pOutputBuffer)
 {
     uint32_t i;
-    for (i = 0; i < FFT_SIZE; i++)
+    uint32_t j = pInputBuffer->index + PROCESS_BUFFER_TRANSMIT_START_INDEX;
+    for (i = 0; i < FFT_SIZE; i++, j++)
     {
-        pComplexBuffer[i].re = UINT24_TO_FLOAT(pInputBuffer->pData[(pInputBuffer->index + PROCESS_BUFFER_TRANSMIT_START_INDEX + i) % CAPTURE_BUFFER_FRAME_COUNT]);
+        pComplexBuffer[i].re = UINT24_TO_FLOAT(pInputBuffer->pData[j % CAPTURE_BUFFER_FRAME_COUNT] >> 8);
         pComplexBuffer[i].im = 0.0f;
     }
 

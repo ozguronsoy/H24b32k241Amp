@@ -60,7 +60,7 @@ int main()
     CHECK_RESULT(ConfigureDAC());
     CHECK_RESULT(InitializeSoundEffects());
     CHECK_RESULT(InitializeAudioControls());
-    
+
     ConfigurePLLI2S();
     CHECK_RESULT(InitializeRender());
     CHECK_RESULT(InitializeCapture());
