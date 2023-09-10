@@ -46,14 +46,20 @@
 #define MEMORY_H
 #endif
 
+#include "arm_math.h"
+#include "arm_common_tables.h"
+#include "arm_const_structs.h"
+
 #define I2S3EXT_REGISTERS ((SpiRegisters *)0x40004000u)
 
 volatile AudioBuffer captureBuffer;
+volatile uint8_t firstTransfer;
+volatile uint32_t offset;
 
 uint32_t Capture_InitBuffer()
 {
     DEBUG_PRINT("CAPTURE: Initializing the capture buffer\n");
-    const uint32_t captureBufferSize = CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t) * 2;
+    const uint32_t captureBufferSize = CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t);
     captureBuffer.pData = (uint32_t *)malloc(captureBufferSize);
     if (captureBuffer.pData == NULL)
     {
@@ -90,20 +96,21 @@ void Capture_ConfigureDmaRegisters()
     // Memory data size = half-word (16-bit), Peripheral data size = half-word
     // Memory increment mode enabled
     DMA1_REGISTERS->S0.CR |= 0b01011 << 10;
-    DMA1_REGISTERS->S0.CR |= 3 << 25;                         // channel 3
-    DMA1_REGISTERS->S0.CR |= 0b111 << 16;                     // double buffered, very high priority
-    DMA1_REGISTERS->S5.CR |= 0b100 << 6;                      // circular mode, data direction = M2P
-    DMA1_REGISTERS->S0.CR |= 1 << 4;                          // transfer complete interrupt
-    DMA1_REGISTERS->S0.NDTR = 2 * CAPTURE_BUFFER_FRAME_COUNT; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
+    DMA1_REGISTERS->S0.CR |= 3 << 25;       // channel 3
+    DMA1_REGISTERS->S0.CR |= 0b11 << 16;    // very high priority
+    DMA1_REGISTERS->S0.CR |= 1 << 4;        // transfer complete interrupt
+    DMA1_REGISTERS->S0.NDTR = 2 * FFT_SIZE; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
     DMA1_REGISTERS->S0.PAR = (uint32_t)&I2S3EXT_REGISTERS->DR;
     DMA1_REGISTERS->S0.M0AR = (uint32_t)captureBuffer.pData;
-    DMA1_REGISTERS->S0.M1AR = (uint32_t)(captureBuffer.pData + CAPTURE_BUFFER_FRAME_COUNT);
     DMA1_REGISTERS->S0.CR |= 1; // enable the DMA
 }
 
 uint32_t InitializeCapture()
 {
     DEBUG_PRINT("CAPTURE: initializing...\n");
+
+    firstTransfer = 1;
+    offset = 0;
 
     if (Capture_InitBuffer() == RESULT_FAIL)
     {
@@ -137,16 +144,20 @@ void StartCapturing()
 
 void ApplyEffects()
 {
+    memcpy(processBuffer.pData, processBuffer.pData + STEP_SIZE, (PROCESS_BUFFER_FRAME_COUNT - STEP_SIZE) * sizeof(uint32_t));
+    memset(processBuffer.pData + (PROCESS_BUFFER_FRAME_COUNT - STEP_SIZE), 0, STEP_SIZE * sizeof(uint32_t));
+    SFX_Equalizer(&captureBuffer, &processBuffer);
+
     volatile const float volume = AUDIO_CONTROLS_NORMALIZE(audioControls.volume);
 
-    uint32_t i, j;
+    uint32_t i = renderBuffer.index;
+    processBuffer.index = PROCESS_BUFFER_RENDER_START_INDEX;
     if (IsCleanMode())
     {
-        for (i = 0, j = renderBuffer.index; i < CAPTURE_BUFFER_FRAME_COUNT; i++, j++)
+        for (; processBuffer.index < (PROCESS_BUFFER_RENDER_START_INDEX + STEP_SIZE); i++, processBuffer.index++)
         {
-            renderBuffer.pData[j] = (processBuffer.pData[i] >> 8) * volume;
-            renderBuffer.pData[j] = ((renderBuffer.pData[j] << 24) & 0xFF000000) | ((renderBuffer.pData[j] >> 8) & 0xFFFF); // 0x00ABCDEF -> 0xEF00ABCD to render correctly
-            processBuffer.index = ((++processBuffer.index) == PROCESS_BUFFER_FRAME_COUNT) ? (0) : (processBuffer.index);
+            renderBuffer.pData[i] = (processBuffer.pData[processBuffer.index] >> 8) * volume;
+            renderBuffer.pData[i] = ((renderBuffer.pData[i] << 24) & 0xFF000000) | ((renderBuffer.pData[i] >> 8) & 0xFFFF); // 0x00ABCDEF -> 0xEF00ABCD to render correctly
         }
     }
     else
@@ -154,19 +165,33 @@ void ApplyEffects()
         SFX_PrepareDistortion();
         SFX_PrepareOverdrive();
         SFX_PrepareChorus();
-        for (i = 0, j = renderBuffer.index; i < CAPTURE_BUFFER_FRAME_COUNT; i++, j++)
+        for (; processBuffer.index < (PROCESS_BUFFER_RENDER_START_INDEX + STEP_SIZE); i++, processBuffer.index++)
         {
-            renderBuffer.pData[j] = SFX_Distortion(SFX_Overdrive(SFX_Chorus(&processBuffer))) * volume;
-            renderBuffer.pData[j] = ((renderBuffer.pData[j] << 24) & 0xFF000000) | ((renderBuffer.pData[j] >> 8) & 0xFFFF); // 0x00ABCDEF -> 0xEF00ABCD to render correctly
-            processBuffer.index = ((++processBuffer.index) == PROCESS_BUFFER_FRAME_COUNT) ? (0) : (processBuffer.index);
+            renderBuffer.pData[i] = SFX_Distortion(SFX_Overdrive(SFX_Chorus(&processBuffer))) * volume;
+            renderBuffer.pData[i] = ((renderBuffer.pData[i] << 24) & 0xFF000000) | ((renderBuffer.pData[i] >> 8) & 0xFFFF); // 0x00ABCDEF -> 0xEF00ABCD to render correctly
         }
     }
 }
 
 void DMA1_Stream0_IRQHandler()
 {
-    memcpy(processBuffer.pData + processBuffer.index, captureBuffer.pData + captureBuffer.index, CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t));
-    captureBuffer.index = (captureBuffer.index + CAPTURE_BUFFER_FRAME_COUNT) % (CAPTURE_BUFFER_FRAME_COUNT * 2);
-    ApplyEffects();
+    if (firstTransfer)
+    {
+        offset = FFT_SIZE;
+        firstTransfer = 0;
+    }
+    else
+    {
+        offset = (offset + STEP_SIZE) % CAPTURE_BUFFER_FRAME_COUNT;
+    }
+
+    DMA1_REGISTERS->S0.CR &= ~1;
+    DMA1_REGISTERS->S0.NDTR = 2 * STEP_SIZE;
+    DMA1_REGISTERS->S0.M0AR = (uint32_t)(captureBuffer.pData + offset);
     DMA1_REGISTERS->LIFCR |= 1 << 5;
+    DMA1_REGISTERS->S0.CR |= 1;
+
+    ApplyEffects();
+
+    captureBuffer.index = offset;
 }

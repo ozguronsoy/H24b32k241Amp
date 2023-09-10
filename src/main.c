@@ -33,15 +33,21 @@
 #define SOUND_EFFECTS_H
 #endif
 
+#include "gpio.h"
+
 #define CHECK_RESULT(x)   \
     if (x == RESULT_FAIL) \
     {                     \
         goto ERROR;       \
     }
 
+#define SCB_CPACR (*(uint32_t *)0xE000ED88u)
+
 int main()
 {
     INIT_MONITOR_HANDLES; // debug only
+
+    SCB_CPACR |= 0b1111 << 20; // set CP10 & CP11 Full Access for FPU
 
     RCC_ConfigureSystemClock();
 
@@ -49,6 +55,7 @@ int main()
 
     RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
 
+    SFX_Initialize();
     CHECK_RESULT(InitializeAudioControls());
 
     ConfigurePLLI2S();
@@ -57,6 +64,8 @@ int main()
     StartRendering();
     StartCapturing();
 
+    MEASURING_INIT();
+
     while (1);
 
 ERROR:
@@ -64,6 +73,7 @@ ERROR:
     DeinitializeRender();
     DeinitializeAudioControls();
     RCC_AHB1ENR &= ~0b11;
+    SCB_CPACR &= ~(0b1111 << 20);
     while (1);
 
     return 0;
