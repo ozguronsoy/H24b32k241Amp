@@ -42,13 +42,6 @@
 
 #define I2S3_REGISTERS ((SpiRegisters *)0x40003C00u)
 
-/*
-     -[0, RENDER_BUFFER_TRANSMIT_START_INDEX) samples are the old (transmitted) samples, they are necessary for the chorus effect.
-
-     -[RENDER_BUFFER_TRANSMIT_START_INDEX, RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE) is the render region, the data will be transfered to the available render buffer.
-
-     -[RENDER_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE, RENDER_BUFFER_FRAME_COUNT) future data, needs to be processed before transmitting.
-*/
 volatile AudioBuffer processBuffer;
 
 /*
@@ -73,10 +66,10 @@ uint32_t Render_InitBuffer()
         return RESULT_FAIL;
     }
     memset(processBuffer.pData, 0, bufferSize);
-    processBuffer.index = PROCESS_BUFFER_TRANSMIT_START_INDEX;
+    processBuffer.index = 0;
 
     DEBUG_PRINT("RENDER: Initializing the render buffer\n");
-    bufferSize = RENDER_BUFFER_FRAME_COUNT * sizeof(uint32_t);
+    bufferSize = RENDER_BUFFER_FRAME_COUNT * sizeof(uint32_t) * 2;
     renderBuffer.pData = (uint32_t *)malloc(bufferSize);
     if (renderBuffer.pData == NULL)
     {
@@ -117,8 +110,8 @@ void Render_ConfigureI2SRegisters()
 
     I2S3_REGISTERS->I2SCFGR |= 0b1010 << 8; // select the I2S mode as master-transmit
     I2S3_REGISTERS->I2SCFGR |= 0b010011;    // steady state low, 24-bit data, 32 bit container, MSB (left) justified
-    I2S3_REGISTERS->I2SPR = I2S_PR_VALUE;
-    I2S3_REGISTERS->CR2 |= 0b10; // Transmit DMA enabled
+    I2S3_REGISTERS->I2SPR = 0b1000001110;   // MCK enabled, even and I2SDIV = 13
+    I2S3_REGISTERS->CR2 |= 0b10;            // Transmit DMA enabled
 }
 
 void Render_ConfigureDmaRegisters()
@@ -128,13 +121,13 @@ void Render_ConfigureDmaRegisters()
     // Memory data size = half-word (16-bit), Peripheral data size = half-word
     // Memory increment mode enabled
     DMA1_REGISTERS->S5.CR |= 0b01011 << 10;
-    DMA1_REGISTERS->S5.CR |= 0b111 << 16;        // Double buffer mode, very high priority
-    DMA1_REGISTERS->S5.CR |= 0b101 << 6;         // circular mode, data direction = M2P
-    DMA1_REGISTERS->S5.CR |= 1 << 4;             // transfer complete interrupt
-    DMA1_REGISTERS->S5.NDTR = 2 * FFT_STEP_SIZE; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
+    DMA1_REGISTERS->S5.CR |= 0b111 << 16;                    // Double buffer mode, very high priority
+    DMA1_REGISTERS->S5.CR |= 0b101 << 6;                     // circular mode, data direction = M2P
+    DMA1_REGISTERS->S5.CR |= 1 << 4;                         // transfer complete interrupt
+    DMA1_REGISTERS->S5.NDTR = 2 * RENDER_BUFFER_FRAME_COUNT; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
     DMA1_REGISTERS->S5.PAR = (uint32_t)&I2S3_REGISTERS->DR;
     DMA1_REGISTERS->S5.M0AR = (uint32_t)renderBuffer.pData;
-    DMA1_REGISTERS->S5.M1AR = (uint32_t)(renderBuffer.pData + FFT_STEP_SIZE);
+    DMA1_REGISTERS->S5.M1AR = (uint32_t)(renderBuffer.pData + RENDER_BUFFER_FRAME_COUNT);
     DMA1_REGISTERS->S5.CR |= 1; // enable the DMA
 }
 
@@ -164,20 +157,8 @@ void StartRendering()
     I2S3_REGISTERS->I2SCFGR |= 1 << 10;
 }
 
-void ShiftProcessBuffer()
-{
-    uint32_t i;
-    for (i = 0; i < (PROCESS_BUFFER_FRAME_COUNT - FFT_STEP_SIZE); i++)
-    {
-        processBuffer.pData[i] = processBuffer.pData[i + FFT_STEP_SIZE];
-    }
-    for (; i < PROCESS_BUFFER_FRAME_COUNT; i++)
-    {
-        processBuffer.pData[i] = 0;
-    }
-}
-
 void DMA1_Stream5_IRQHandler()
 {
-    renderBuffer.index ^= (RENDER_BUFFER_FRAME_COUNT / 2);
+    renderBuffer.index ^= RENDER_BUFFER_FRAME_COUNT;
+    DMA1_REGISTERS->HIFCR |= 1 << 11;
 }

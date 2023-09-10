@@ -14,4 +14,3 @@ extern volatile AudioBuffer renderBuffer;
 */
 uint32_t InitializeRender();
 void StartRendering();
-void ShiftProcessBuffer();

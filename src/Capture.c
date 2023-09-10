@@ -48,13 +48,12 @@
 
 #define I2S3EXT_REGISTERS ((SpiRegisters *)0x40004000u)
 
-volatile uint32_t offset;
 volatile AudioBuffer captureBuffer;
 
 uint32_t Capture_InitBuffer()
 {
     DEBUG_PRINT("CAPTURE: Initializing the capture buffer\n");
-    const uint32_t captureBufferSize = CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t);
+    const uint32_t captureBufferSize = CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t) * 2;
     captureBuffer.pData = (uint32_t *)malloc(captureBufferSize);
     if (captureBuffer.pData == NULL)
     {
@@ -79,10 +78,9 @@ void Capture_ConfigureI2SRegisters()
 {
     DEBUG_PRINT("CAPTURE: Configuring the I2S3ext registers\n");
 
-    I2S3EXT_REGISTERS->I2SCFGR |= 0b1011 << 8; // select the I2S mode as master-receive
+    I2S3EXT_REGISTERS->I2SCFGR |= 0b1001 << 8; // select the I2S mode as slave-receive
     I2S3EXT_REGISTERS->I2SCFGR |= 0b010011;    // steady state low, 24-bit data, 32 bit container, MSB (left) justified
-    I2S3EXT_REGISTERS->I2SPR = I2S_PR_VALUE;
-    I2S3EXT_REGISTERS->CR2 |= 1; // Receive DMA enabled
+    I2S3EXT_REGISTERS->CR2 |= 1;               // Receive DMA enabled
 }
 
 void Capture_ConfigureDmaRegisters()
@@ -92,21 +90,20 @@ void Capture_ConfigureDmaRegisters()
     // Memory data size = half-word (16-bit), Peripheral data size = half-word
     // Memory increment mode enabled
     DMA1_REGISTERS->S0.CR |= 0b01011 << 10;
-    DMA1_REGISTERS->S0.CR |= 3 << 25;       // channel 3
-    DMA1_REGISTERS->S0.CR |= 0b11 << 16;    // very high priority
-    DMA1_REGISTERS->S0.CR &= ~(0b11 << 6);  // data direction = P2M
-    DMA1_REGISTERS->S0.CR |= 1 << 4;        // transfer complete interrupt
-    DMA1_REGISTERS->S0.NDTR = 2 * FFT_SIZE; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
+    DMA1_REGISTERS->S0.CR |= 3 << 25;                         // channel 3
+    DMA1_REGISTERS->S0.CR |= 0b111 << 16;                     // double buffered, very high priority
+    DMA1_REGISTERS->S5.CR |= 0b100 << 6;                      // circular mode, data direction = M2P
+    DMA1_REGISTERS->S0.CR |= 1 << 4;                          // transfer complete interrupt
+    DMA1_REGISTERS->S0.NDTR = 2 * CAPTURE_BUFFER_FRAME_COUNT; // since the I2S container size is 32 bits and one transfer is 16 bits, have to make (2 * buffer_size) transfers
     DMA1_REGISTERS->S0.PAR = (uint32_t)&I2S3EXT_REGISTERS->DR;
     DMA1_REGISTERS->S0.M0AR = (uint32_t)captureBuffer.pData;
+    DMA1_REGISTERS->S0.M1AR = (uint32_t)(captureBuffer.pData + CAPTURE_BUFFER_FRAME_COUNT);
     DMA1_REGISTERS->S0.CR |= 1; // enable the DMA
 }
 
 uint32_t InitializeCapture()
 {
     DEBUG_PRINT("CAPTURE: initializing...\n");
-
-    offset = (FFT_SIZE - FFT_STEP_SIZE);
 
     if (Capture_InitBuffer() == RESULT_FAIL)
     {
@@ -131,29 +128,34 @@ void StartCapturing()
 
 void ApplyEffects()
 {
-    ShiftProcessBuffer();
-    SFX_Equalizer(&captureBuffer, &processBuffer);
-
     volatile const float volume = AUDIO_CONTROLS_NORMALIZE(audioControls.volume);
 
     uint32_t i, j;
-    for (i = PROCESS_BUFFER_TRANSMIT_START_INDEX, j = renderBuffer.index; i < (PROCESS_BUFFER_TRANSMIT_START_INDEX + FFT_STEP_SIZE); i++, j++)
+    if (IsCleanMode())
     {
-        if (!IsCleanMode())
+        for (i = 0, j = renderBuffer.index; i < CAPTURE_BUFFER_FRAME_COUNT; i++, j++)
         {
-            processBuffer.pData[i] = SFX_Chorus(&processBuffer);
-            processBuffer.pData[i] = SFX_Overdrive(processBuffer.pData[i]);
-            processBuffer.pData[i] = SFX_Distortion(processBuffer.pData[i]);
+            renderBuffer.pData[j] = processBuffer.pData[i] * volume;
+            processBuffer.index = ((++processBuffer.index) == PROCESS_BUFFER_FRAME_COUNT) ? (0) : (processBuffer.index);
         }
-        renderBuffer.pData[j] = processBuffer.pData[i] * volume;
+    }
+    else
+    {
+        SFX_PrepareDistortion();
+        SFX_PrepareOverdrive();
+        SFX_PrepareChorus();
+        for (i = 0, j = renderBuffer.index; i < CAPTURE_BUFFER_FRAME_COUNT; i++, j++)
+        {
+            renderBuffer.pData[j] = SFX_Distortion(SFX_Overdrive(SFX_Chorus(&processBuffer))) * volume;
+            processBuffer.index = ((++processBuffer.index) == PROCESS_BUFFER_FRAME_COUNT) ? (0) : (processBuffer.index);
+        }
     }
 }
 
 void DMA1_Stream0_IRQHandler()
 {
-    offset = (offset + FFT_STEP_SIZE) % CAPTURE_BUFFER_FRAME_COUNT;
-    DMA1_REGISTERS->S0.M0AR = (uint32_t)(captureBuffer.pData + offset);
-    DMA1_REGISTERS->S0.NDTR = 2 * FFT_STEP_SIZE;
-    DMA1_REGISTERS->S0.CR |= 1; // enable the DMA
+    memcpy(processBuffer.pData + processBuffer.index, captureBuffer.pData + captureBuffer.index, CAPTURE_BUFFER_FRAME_COUNT * sizeof(uint32_t));
+    captureBuffer.index = (captureBuffer.index + CAPTURE_BUFFER_FRAME_COUNT) % (CAPTURE_BUFFER_FRAME_COUNT * 2);
     ApplyEffects();
+    DMA1_REGISTERS->LIFCR |= 1 << 5;
 }

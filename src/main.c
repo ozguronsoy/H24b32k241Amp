@@ -39,7 +39,7 @@
 #endif
 
 #include "gpio.h"
-#include <memory.h>
+#include "arm_math.h"
 
 #define CHECK_RESULT(x)   \
     if (x == RESULT_FAIL) \
@@ -55,10 +55,9 @@ int main()
 
     DEBUG_PRINTF("Total Buffer Memory Usage: %lf KB\n", TOTAL_BUFFER_MEM_USAGE_KB);
 
-    RCC_AHB1ENR |= 0b111; // enable the GPIO A, B & C clock
+    RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
 
     CHECK_RESULT(ConfigureDAC());
-    CHECK_RESULT(InitializeSoundEffects());
     CHECK_RESULT(InitializeAudioControls());
 
     ConfigurePLLI2S();
@@ -71,7 +70,7 @@ int main()
 
 ERROR: // TODO disable IRQs and DMA and peripherals
     DeinitializeAudioControls();
-    RCC_AHB1ENR &= ~0b111;
+    RCC_AHB1ENR &= ~0b11;
     while (1);
 
     return 0;
