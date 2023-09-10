@@ -23,9 +23,6 @@
 #define INPUT_RANGE(sample) (((sample)*2.0f) - 1.0f)    // [0, 1] -> [-1, 1]
 #define OUTPUT_RANGE(sample) (((sample) + 1.0f) * 0.5f) // [-1, 1] -> [0, 1]
 
-#define DISTORTION_LOWER_BOUNDARY(distortion) ((distortion) * (0.3f * UINT24_MAX))
-#define DISTORTION_UPPER_BOUNDARY(distortion) ((distortion) * (0.7f * UINT24_MAX))
-
 #define OVERDRIVE_ORIGIN (PROCESS_BUFFER_FRAME_COUNT / 2)
 
 #define CHORUS_BASE_DELAY_MS 3u
@@ -33,11 +30,11 @@
 #define CHORUS_DELAY_MS 30u
 #define CHORUS_DELAY_SAMPLE (CHORUS_DELAY_MS * SAMPLE_RATE / 1000u)
 // fs * (pow(2, semitone / 12) - 1.0)
-// 0.75 semitone
-#define CHORUS_RESAMPLE_DELTA 1416u
+// 1 semitone
+#define CHORUS_RESAMPLE_DELTA 1902u
 
-float distortion_upper_boundary = 0.0f;
-float distortion_lower_boundary = 0.0f;
+uint32_t distortion_upper_boundary = 0;
+uint32_t distortion_lower_boundary = 0;
 
 float overdrive_wet = 0.0f;
 float overdrive_dry = 0.0f;
@@ -49,9 +46,8 @@ float chorus_dry = 0.0f;
 
 void SFX_PrepareDistortion()
 {
-    const float distortion = AUDIO_CONTROLS_NORMALIZE(audioControls.distortion);
-    distortion_lower_boundary = DISTORTION_LOWER_BOUNDARY(distortion);
-    distortion_upper_boundary = DISTORTION_UPPER_BOUNDARY(distortion);
+    distortion_lower_boundary = ((float)audioControls.distortion / (ADC_MAX * 10 / 3)) * UINT24_MAX;
+    distortion_upper_boundary = UINT24_MAX - distortion_lower_boundary;
 }
 
 uint32_t SFX_Distortion(uint32_t sample)
@@ -130,5 +126,5 @@ uint32_t SFX_Chorus(volatile AudioBuffer *pBuffer)
     const uint16_t flooredResampleIndex = floorf(resampleIndex);
     const float resampleFactor = resampleIndex - flooredResampleIndex;
 
-    return pBuffer->pData[pBuffer->index] * chorus_dry + (pBuffer->pData[flooredResampleIndex] * (1.0f - resampleFactor) + pBuffer->pData[flooredResampleIndex + 1] * resampleFactor) * chorus_wet;
+    return (pBuffer->pData[pBuffer->index] >> 8) * chorus_dry + ((pBuffer->pData[flooredResampleIndex] >> 8) * (1.0f - resampleFactor) + (pBuffer->pData[flooredResampleIndex + 1] >> 8) * resampleFactor) * chorus_wet;
 }

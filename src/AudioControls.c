@@ -87,6 +87,8 @@ uint32_t InitializeAudioControls()
 
 void DeinitializeAudioControls()
 {
+    DEBUG_PRINT("AUDIO CONTROLS: Deinitializing\n");
+
     NVIC_ISER0 &= ~(1 << 18);
     NVIC_IPR4 &= ~(0b11110000 << 24);
 

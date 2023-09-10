@@ -121,6 +121,15 @@ uint32_t InitializeCapture()
     return RESULT_SUCCESS;
 }
 
+void DeinitializeCapture()
+{
+    DEBUG_PRINT("CAPTURE: Deinitializing\n");
+
+    NVIC_ISER0 &= ~(1 << 11);
+    DMA1_REGISTERS->S0.CR &= ~1;
+    I2S3EXT_REGISTERS->I2SCFGR &= ~(1 << 10);
+}
+
 void StartCapturing()
 {
     I2S3EXT_REGISTERS->I2SCFGR |= 1 << 10;
@@ -135,7 +144,8 @@ void ApplyEffects()
     {
         for (i = 0, j = renderBuffer.index; i < CAPTURE_BUFFER_FRAME_COUNT; i++, j++)
         {
-            renderBuffer.pData[j] = processBuffer.pData[i] * volume;
+            renderBuffer.pData[j] = (processBuffer.pData[i] >> 8) * volume;
+            renderBuffer.pData[j] = ((renderBuffer.pData[j] << 24) & 0xFF000000) | ((renderBuffer.pData[j] >> 8) & 0xFFFF); // 0x00ABCDEF -> 0xEF00ABCD to render correctly
             processBuffer.index = ((++processBuffer.index) == PROCESS_BUFFER_FRAME_COUNT) ? (0) : (processBuffer.index);
         }
     }
@@ -147,6 +157,7 @@ void ApplyEffects()
         for (i = 0, j = renderBuffer.index; i < CAPTURE_BUFFER_FRAME_COUNT; i++, j++)
         {
             renderBuffer.pData[j] = SFX_Distortion(SFX_Overdrive(SFX_Chorus(&processBuffer))) * volume;
+            renderBuffer.pData[j] = ((renderBuffer.pData[j] << 24) & 0xFF000000) | ((renderBuffer.pData[j] >> 8) & 0xFFFF); // 0x00ABCDEF -> 0xEF00ABCD to render correctly
             processBuffer.index = ((++processBuffer.index) == PROCESS_BUFFER_FRAME_COUNT) ? (0) : (processBuffer.index);
         }
     }

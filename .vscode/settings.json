@@ -10,7 +10,8 @@
         "main.h": "c",
         "algorithm": "c",
         "daccontrols.h": "c",
-        "sstream": "c"
+        "sstream": "c",
+        "audiocontrols.h": "c"
     },
     "cmake.configureOnOpen": false
 }

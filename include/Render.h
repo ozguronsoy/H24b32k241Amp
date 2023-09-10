@@ -13,4 +13,5 @@ extern volatile AudioBuffer renderBuffer;
     PB10 - I2S3_MCK
 */
 uint32_t InitializeRender();
+void DeinitializeRender();
 void StartRendering();

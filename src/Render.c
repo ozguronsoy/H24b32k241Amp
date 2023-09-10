@@ -77,7 +77,7 @@ uint32_t Render_InitBuffer()
         return RESULT_FAIL;
     }
     memset(renderBuffer.pData, 0, bufferSize);
-    renderBuffer.index = 0;
+    renderBuffer.index = RENDER_BUFFER_FRAME_COUNT; // start index of the available buffer (currently not targeted by the DMA)
 
     return RESULT_SUCCESS;
 }
@@ -150,6 +150,17 @@ uint32_t InitializeRender()
     DEBUG_PRINT("RENDER: initialized successfully\n");
 
     return RESULT_SUCCESS;
+}
+
+void DeinitializeRender()
+{
+    DEBUG_PRINT("RENDER: Deinitializing\n");
+
+    NVIC_ISER0 &= ~(1 << 16);
+    DMA1_REGISTERS->S5.CR &= ~1;
+    I2S3_REGISTERS->I2SCFGR &= ~(1 << 10);
+    RCC_APB1ENR &= ~(1 << 15);
+    RCC_AHB1ENR &= ~(1 << 21);
 }
 
 void StartRendering()

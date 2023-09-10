@@ -9,4 +9,5 @@ extern volatile AudioBuffer captureBuffer;
     PB4  - I2S3ext_SD
 */
 uint32_t InitializeCapture();
+void DeinitializeCapture();
 void StartCapturing();

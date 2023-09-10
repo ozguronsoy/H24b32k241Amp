@@ -23,11 +23,6 @@
 #define CAPTURE_H
 #endif
 
-#if !defined(DAC_CONTROLS_H)
-#include "DacControls.h"
-#define DAC_CONTROLS_H
-#endif
-
 #if !defined(AUDIO_CONTROLS_H)
 #include "AudioControls.h"
 #define AUDIO_CONTROLS_H
@@ -37,9 +32,6 @@
 #include "SoundEffects.h"
 #define SOUND_EFFECTS_H
 #endif
-
-#include "gpio.h"
-#include "arm_math.h"
 
 #define CHECK_RESULT(x)   \
     if (x == RESULT_FAIL) \
@@ -57,7 +49,6 @@ int main()
 
     RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
 
-    CHECK_RESULT(ConfigureDAC());
     CHECK_RESULT(InitializeAudioControls());
 
     ConfigurePLLI2S();
@@ -68,7 +59,9 @@ int main()
 
     while (1);
 
-ERROR: // TODO disable IRQs and DMA and peripherals
+ERROR:
+    DeinitializeCapture();
+    DeinitializeRender();
     DeinitializeAudioControls();
     RCC_AHB1ENR &= ~0b11;
     while (1);
