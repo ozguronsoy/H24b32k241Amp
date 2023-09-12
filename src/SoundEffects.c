@@ -36,9 +36,9 @@
 #define CHORUS_RESAMPLE_DELTA 1902u
 
 #define EQ_NYQUIST (FFT_SIZE / 2)
-#define EQ_BIN_START_L_MID 21u   // 160Hz, calculated with [(FFT_SIZE / SAMPLE_RATE) * 160Hz]
-#define EQ_BIN_START_H_MID 93u   // 720Hz
-#define EQ_BIN_START_TREBLE 164u // 1280Hz
+#define EQ_BIN_START_L_MID ((uint32_t)(FFT_SIZE / ((float)SAMPLE_RATE) * 160u) + 1)   // 160Hz
+#define EQ_BIN_START_H_MID ((uint32_t)(FFT_SIZE / ((float)SAMPLE_RATE) * 720u) + 1)   // 720Hz
+#define EQ_BIN_START_TREBLE ((uint32_t)(FFT_SIZE / ((float)SAMPLE_RATE) * 1280u) + 1) // 1280Hz
 
 #if FFT_SIZE == 4096
 #define EQ_CFFT_STRUCT arm_cfft_sR_f32_len4096
@@ -191,10 +191,10 @@ void SFX_Equalizer(volatile AudioBuffer *pInputBuffer, volatile AudioBuffer *pOu
 
     arm_cfft_f32(&EQ_CFFT_STRUCT, (float *)&pComplexBuffer->re, 0, 1);
 
-    volatile const float bass = audioControls.bass;
-    volatile const float low_mid = audioControls.low_mid;
-    volatile const float high_mid = audioControls.high_mid;
-    volatile const float treble = audioControls.treble;
+    volatile const float bass = AUDIO_CONTROLS_NORMALIZE(audioControls.bass);
+    volatile const float low_mid = AUDIO_CONTROLS_NORMALIZE(audioControls.low_mid);
+    volatile const float high_mid = AUDIO_CONTROLS_NORMALIZE(audioControls.high_mid);
+    volatile const float treble = AUDIO_CONTROLS_NORMALIZE(audioControls.treble);
 
     for (i = 0; i < EQ_BIN_START_L_MID; i++)
     {

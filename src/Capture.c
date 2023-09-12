@@ -142,10 +142,22 @@ void StartCapturing()
     I2S3EXT_REGISTERS->I2SCFGR |= 1 << 10;
 }
 
+void ShiftBuffer()
+{
+    uint32_t i;
+    for (i = 0; i < (PROCESS_BUFFER_FRAME_COUNT - STEP_SIZE); i++) // faster than using memcpy + memset
+    {
+        processBuffer.pData[i] = processBuffer.pData[i + STEP_SIZE];
+    }
+    for (; i < PROCESS_BUFFER_FRAME_COUNT; i++)
+    {
+        processBuffer.pData[i] = 0;
+    }
+}
+
 void ApplyEffects()
 {
-    memcpy(processBuffer.pData, processBuffer.pData + STEP_SIZE, (PROCESS_BUFFER_FRAME_COUNT - STEP_SIZE) * sizeof(uint32_t));
-    memset(processBuffer.pData + (PROCESS_BUFFER_FRAME_COUNT - STEP_SIZE), 0, STEP_SIZE * sizeof(uint32_t));
+    ShiftBuffer();
     SFX_Equalizer(&captureBuffer, &processBuffer);
 
     volatile const float volume = AUDIO_CONTROLS_NORMALIZE(audioControls.volume);

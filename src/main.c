@@ -47,11 +47,11 @@ int main()
 {
     INIT_MONITOR_HANDLES; // debug only
 
+    DEBUG_PRINTF("Total Buffer Memory Usage: %lf KB\n", TOTAL_BUFFER_MEM_USAGE_KB);
+
     SCB_CPACR |= 0b1111 << 20; // set CP10 & CP11 Full Access for FPU
 
     RCC_ConfigureSystemClock();
-
-    DEBUG_PRINTF("Total Buffer Memory Usage: %lf KB\n", TOTAL_BUFFER_MEM_USAGE_KB);
 
     RCC_AHB1ENR |= 0b11; // enable the GPIO A & B clock
 
